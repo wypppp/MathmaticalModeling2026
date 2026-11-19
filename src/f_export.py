@@ -121,20 +121,25 @@ def write_p3(path, tpl_k, inst, sol, ev, new_id):
                 for kid, role in g.parts:
                     k = blocks[kid]
                     flag, who = role_flag(role, k.owner)
+                    o = inst.assign[kid]
+                    if role == "代领" and o[0] == "T" and o[2] in ("R3", "R4"):
+                        role = "代领" + o[2]
                     key = (flag, who, role)
                     by.setdefault(key, [0.0, []])
                     by[key][0] += k.s(inst.cap, x)
                     by[key][1].extend(k.items.items())
                 for (flag, who, role), (sv, items) in by.items():
-                    note = {"own": "", "代领": f"代{who}领", "代交": f"代{who}交", "领回": "领回暂存货物"}[role]
+                    note = {"own": "", "代领": f"代{who}领", "代领R3": f"代{who}领", "代领R4": f"代{who}领", "代交": f"代{who}交", "领回": "领回暂存货物"}[role]
                     if sgn > 0 and gid in st.leave:
                         note = (note + "；" if note else "") + "装车后留置等待"
                     if sgn < 0 and g.unload in fb.H[x]:
                         note = (note + "；" if note else "") + "卸载进入队属货物仓库"
                     if sgn > 0 and g.load in fb.H[x]:
                         note = (note + "；" if note else "") + "队属货物仓库装车"
-                    if sgn < 0 and role == "代领" and g.unload not in fb.H[who]:
-                        note += "；暂存，由货主领回"
+                    if sgn < 0 and role == "代领R4":
+                        note += "；暂存，由货主的批次到此领回"
+                    if sgn < 0 and role == "代领R3":
+                        note += "；卸在此仓库，货主自取"
                     segs.append(("收" if sgn < 0 else "发", flag, who, items, sgn * sv, "否" if (sgn > 0 and gid in st.leave) else "是", note))
             if not segs:
                 note = "回到驻地" if is_base else ("返回汇合" if st.rejoin else "途经，不作业")
