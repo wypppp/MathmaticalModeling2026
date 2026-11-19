@@ -1,6 +1,6 @@
 """补充实验：问题 3 的消融与合成方式敏感性；代领③的对照与自取量；问题 4 的批次数折衷；口径灵敏度。
 
-用法：python src/f_run_extra.py [p3|r3|p4b|rules|all]
+用法：python src/f_run_extra.py [p3|r3|p4b|rules|p4rules|all]
 输出：results/F/extra/*.csv
 """
 from __future__ import annotations
@@ -176,6 +176,53 @@ def p3_rules():
     pd.DataFrame(rows).to_csv(OUT / "p3_rules.csv", index=False, encoding="utf-8-sig")
 
 
+def p4_rules(opt=None):
+    """T3：在备选时间规则（默认 split_legs）下，按 f_run_p4 的同一流程重做问题 3 方案与问题 4 搜索，检验“问题 4 优于问题 3”是否保持。只读分析。"""
+    opt = opt or dict(split_legs=True)
+    saved = dict(fe.OPT)
+    fe.OPT.update(opt)
+    try:
+        inst3, base, evb = run3(a3)
+        ref3 = dict(l=(inst3.lb_tau, inst3.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+        sol3, _ = inst3.improve(base, ref3)
+        ev3 = inst3.evaluate(sol3)
+        _, tot3, _ = f_p2.summarize(a3, batches, blocks, cap)
+        nB = tot3["B"]
+        rW = f_p2.solve(batches, blocks, cap, D, fix_batches=nB, levels=("U9", "W", "A"))
+        P = f_p4.P4(batches, blocks, cap, D, nB, ref3, (0.0, tot3["E"]), (rW["stats"]["W"], tot3["pairs"]), u9_min=5, log=lambda *x: None)
+        runs = []
+        for sd in range(6):
+            a, sol, inst, sc, _ = P.search(a3, sol3, seed=sd, time_limit=600)
+            runs.append((f"自问题3出发/种子{sd}", a, sol, inst, sc))
+        aW = rW["assign"]
+        instW = P.instance(aW)
+        if instW.routable:
+            sW = instW.baseline()
+            if instW.evaluate(sW)["feasible"]:
+                sW, _ = instW.improve(sW, ref3)
+                for sd in range(6):
+                    a, sol, inst, sc, _ = P.search(aW, sW, seed=sd, time_limit=600)
+                    runs.append((f"自仓库对最少解出发/种子{sd}", a, sol, inst, sc))
+        name, a, sol, inst, sc = min(runs, key=lambda r: r[4])
+        sol, _ = inst.improve(sol, ref3)
+        ev = inst.evaluate(sol)
+        sc, det = P.score(a, ev)
+        s3, d3 = P.score(a3, ev3)
+        rows = []
+        for nm, dd, z in (("问题3方案", d3, s3), ("问题4方案（" + name + "）", det, sc)):
+            rows.append(dict(读法="+".join(opt), 方案=nm, 合成分=z, 调运总批次=dd["B"], 总车数=dd["N"], 总人数=dd["P"], 代领代交等效车数=dd["A"], 执行总时间=dd["tau"],
+                             开始偏离=dd["delta"], 调运总里程=dd["D"], 载货总行驶距离=dd["L"], 失衡度=dd["E"], 批次仓库对=dd["pairs"], 可行=ev["feasible"] and P.static_ok(a)))
+        for nm, a_, sol_, inst_, z in runs:
+            _, dd = P.score(a_, inst_.evaluate(sol_))
+            rows.append(dict(读法="+".join(opt), 方案="搜索终点：" + nm, 合成分=z, 执行总时间=dd["tau"], 载货总行驶距离=dd["L"], 开始偏离=dd["delta"], 失衡度=dd["E"], 批次仓库对=dd["pairs"]))
+    finally:
+        fe.OPT.clear()
+        fe.OPT.update(saved)
+    df = pd.DataFrame(rows)
+    df.to_csv(OUT / "p4_rules.csv", index=False, encoding="utf-8-sig")
+    print(df.to_string(index=False))
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
@@ -188,4 +235,6 @@ if __name__ == "__main__":
         p4_batches()
     if what in ("rules", "all"):
         p3_rules()
+    if what in ("p4rules", "all"):
+        p4_rules()
     print(f"用时 {time.time() - t0:.0f}s")
