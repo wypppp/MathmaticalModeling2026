@@ -11,7 +11,7 @@
 
 ## 下一步
 1. 人独立读题，写 `notes/human_G0.md`（目标、约束、疑问、直觉想法）
-2. Claude、GPT 分别独立写 `review/claude_G0_spec.md`、`review/gpt_G0_spec.md`，互不读取
+2. ~~Claude~~（已完成 `review/claude_G0_spec.md`）、GPT 分别独立写 `review/claude_G0_spec.md`、`review/gpt_G0_spec.md`，互不读取
 3. 人对比三份，裁决分歧，合并成 `spec.md` v1
 
 ## 决策记录
@@ -19,7 +19,7 @@
 |---|---|---|---|
 
 ## 未解决问题
--
+- 官方模拟器已不可用（截止 2026-09-13、需队号登录、仅本机回环）。Q3/Q4 拟按附件2复刻模拟器，复刻假设见 claude_G0_spec.md §6.2，待人确认
 
 ## 环境准备记录（2026-11-19，GPT）
 - 按用户指令完成环境支持任务；主工程/审查角色仍待人指定，当前阶段保持 G0。
