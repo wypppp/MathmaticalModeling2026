@@ -133,7 +133,7 @@ def write_p3(path, tpl_k, inst, sol, ev, new_id):
                         note = (note + "；" if note else "") + "卸载进入队属货物仓库"
                     if sgn > 0 and g.load in fb.H[x]:
                         note = (note + "；" if note else "") + "队属货物仓库装车"
-                    if sgn < 0 and role == "代领" and g.unload not in fb.H[blocks[g.parts[0][0]].owner]:
+                    if sgn < 0 and role == "代领" and g.unload not in fb.H[who]:
                         note += "；暂存，由货主领回"
                     segs.append(("收" if sgn < 0 else "发", flag, who, items, sgn * sv, "否" if (sgn > 0 and gid in st.leave) else "是", note))
             if not segs:
