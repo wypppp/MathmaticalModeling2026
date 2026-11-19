@@ -151,6 +151,25 @@ def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, 
                 m.addConstr(p >= v)
             pv.append(p)
     V0 = gp.quicksum(pv)
+    # 批次-仓库对（供问题 4 的种子与下界）
+    tg = {}
+
+    def tgt(b, w, v):
+        if w in fb.H[batches[b].unit]:
+            return
+        if (b, w) not in tg:
+            tg[b, w] = m.addVar(vtype="B")
+        m.addConstr(tg[b, w] >= v)
+
+    for (kid, o), v in z.items():
+        k = blocks[kid]
+        if o[0] == "own":
+            tgt(k.batch, k.w, v)
+        elif o[0] == "REV":
+            tgt(o[1], k.h, v)
+        else:
+            tgt(o[1], k.w, v)
+    Wp = gp.quicksum(tg.values())
     stats = {}
     if fix_batches is not None:
         m.addConstr(nB == fix_batches)
@@ -158,7 +177,8 @@ def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, 
         if lv == "B" and fix_batches is not None:
             stats["B"] = fix_batches
             continue
-        expr, sense = {"U9": (u9, gp.GRB.MAXIMIZE), "B": (nB, gp.GRB.MINIMIZE), "A": (A, gp.GRB.MINIMIZE), "V0": (V0, gp.GRB.MINIMIZE)}[lv]
+        expr, sense = {"U9": (u9, gp.GRB.MAXIMIZE), "B": (nB, gp.GRB.MINIMIZE), "A": (A, gp.GRB.MINIMIZE), "V0": (V0, gp.GRB.MINIMIZE),
+                       "W": (Wp, gp.GRB.MINIMIZE)}[lv]
         m.setObjective(expr, sense)
         m.optimize()
         if m.Status != gp.GRB.OPTIMAL:

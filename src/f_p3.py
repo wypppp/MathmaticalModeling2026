@@ -17,7 +17,7 @@ LAST_DAY = 91
 
 
 class Instance:
-    def __init__(self, assign, batches, blocks, cap, D):
+    def __init__(self, assign, batches, blocks, cap, D, cache=None):
         self.assign, self.batches, self.blocks, self.cap, self.D = assign, batches, blocks, cap, D
         self.groups = fr.batch_groups(assign, batches, blocks, cap)
         self.ids = sorted(self.groups)
@@ -26,6 +26,12 @@ class Instance:
             u = batches[b].unit
             T = fr.batch_T(self.groups[b], u)[0]
             self.T[b] = T
+            sig = (b, T, tuple(sorted((g.gid, round(g.s, 9)) for g in self.groups[b].values())))
+            self.sig = getattr(self, "sig", {})
+            self.sig[b] = sig
+            if cache is not None and sig in cache:
+                self.cands[b], self.base_idx[b] = cache[sig]
+                continue
             allr = []
             for steps in fr.enumerate_routes(u, T, self.groups[b], D):
                 ev = fr.evaluate(b, u, T, steps, D)
@@ -36,7 +42,11 @@ class Instance:
                     tg = [s.node for s in acts if (s.load or s.unload) and s.node not in fb.H[u]]
                     ev["n_revisit"] = len(tg) - len(set(tg))
                     allr.append(ev)
-            assert allr, f"批 {b} 无合规路线"
+            if not allr:
+                if cache is not None:
+                    cache[sig] = ([], -1)
+                self.cands[b], self.base_idx[b] = [], -1
+                continue
             simple = [e for e in allr if e["n_leave"] == 0 and e["n_pass"] == 0 and e["n_revisit"] == 0]
             base = min(simple or allr, key=lambda e: (e["D"], e["tau"], e["Lbar"]))
             nd = []
@@ -49,6 +59,11 @@ class Instance:
                 nd.append(base)
             self.cands[b] = nd
             self.base_idx[b] = nd.index(base)
+            if cache is not None:
+                cache[sig] = (nd, self.base_idx[b])
+        self.routable = all(self.cands[b] for b in self.ids)
+        if not self.routable:
+            return
         self.lb_tau = sum(min(c["tau"] for c in self.cands[b]) for b in self.ids)
         self.lb_L = sum(min(c["Lbar"] for c in self.cands[b]) for b in self.ids)
         # 被代走的 (原批次, 执行批次) 对；R4 的 (执行批次, 领回批次, 暂存仓)
