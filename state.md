@@ -11,7 +11,7 @@
 
 ## 下一步
 1. 人独立读题，写 `notes/human_G0.md`（目标、约束、疑问、直觉想法）
-2. ~~Claude~~（已完成 `review/claude_G0_spec.md`）、GPT 分别独立写 `review/claude_G0_spec.md`、`review/gpt_G0_spec.md`，互不读取
+2. Claude、GPT 已分别独立完成各自的 G0 读题稿，待人对比。
 3. 人对比三份，裁决分歧，合并成 `spec.md` v1
 
 ## 决策记录
@@ -28,6 +28,11 @@
 - 本地 `.vscode/settings.json`（Git 忽略）配置默认解释器为 `.venv\Scripts\python.exe`；编辑器已有解释器选择时需手动切换。
 - 修复 `test/gb_exp.py` 的 `sum(vars)` 累加字典键问题，改为 `gp.quicksum(vars.values())` 并添加结果断言。
 - ENV-01/02 均通过：原测试修复后 3000 变量/3000 约束最优值 3000；Pyomo gurobi_direct 求解通过；库可导入且 pip check 无冲突。日志见 `test/environment_check.log`，仅验证环境，不涉及赛题 A/C 层结论。
+
+## G0 独立读题记录（2026-11-19，GPT）
+
+- 完成 `review/gpt_G0_spec.md`，按 `spec.md` 九节登记原题要求、未明示事项与待裁决歧义，每项标注 PDF 页码或附件节号。
+- 待人裁决事项见独立读题稿 §7，包括定位区域和覆盖命题、第二检测点评价口径、全清与停止的证据标准、演练及正式结果的统计口径。当前仍为 G0，下一步由人对比三份独立记录并裁决。
 
 ## 演练失误台账（只记严重错误）
 | 类别 S语义/M建模/E工程/P论证 | 描述 | 严重程度 | 发现者 | 发现阶段 | 是否提交前解决 |
