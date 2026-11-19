@@ -10,7 +10,7 @@
 - 流程文档：`process/选题方法.md`、`process/差异化洞察.md`、`process/第三方角色.md`
 
 ## 下一步
-1. ~~人独立读题~~（已完成）；~~Claude G0~~（已完成）
+1. ~~人独立读题、四方 G0~~（已完成）；裁决单 review/G0_compare.md 待人裁决
 2. Claude、GPT 独立写 `review/<模型>_G0_spec.md`；第三方按 G0/G1 外审
 3. Claude 出 G0_compare，人裁决 → spec v1
 
