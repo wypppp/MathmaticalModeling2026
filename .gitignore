@@ -1,0 +1,21 @@
+# 许可证与密钥 —— 绝不提交
+*.lic
+gurobi.lic
+.env
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 大体积中间文件（需要提交的结果请放 results/ 并显式 add）
+*.tmp
