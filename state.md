@@ -21,6 +21,14 @@
 ## 未解决问题
 -
 
+## 环境准备记录（2026-11-19，GPT）
+- 按用户指令完成环境支持任务；主工程/审查角色仍待人指定，当前阶段保持 G0。
+- 终端原有 python 为 Windows 商店占位程序；使用 uv 管理的 Python 3.12.3 创建仓库 `.venv`，从南科大镜像安装 requirements.txt 中全部库；实际版本见 `test/environment_freeze.txt`。
+- 用户级 `GRB_LICENSE_FILE` 已持久配置为 `D:\WYP\SOFTWARE\Gurobi\win64\bin\gurobi.lic`；未修改、复制或提交许可证。已有终端/编辑器需重新启动以继承用户环境变量。
+- 本地 `.vscode/settings.json`（Git 忽略）配置默认解释器为 `.venv\Scripts\python.exe`；编辑器已有解释器选择时需手动切换。
+- 修复 `test/gb_exp.py` 的 `sum(vars)` 累加字典键问题，改为 `gp.quicksum(vars.values())` 并添加结果断言。
+- ENV-01/02 均通过：原测试修复后 3000 变量/3000 约束最优值 3000；Pyomo gurobi_direct 求解通过；库可导入且 pip check 无冲突。日志见 `test/environment_check.log`，仅验证环境，不涉及赛题 A/C 层结论。
+
 ## 演练失误台账（只记严重错误）
 | 类别 S语义/M建模/E工程/P论证 | 描述 | 严重程度 | 发现者 | 发现阶段 | 是否提交前解决 |
 |---|---|---|---|---|---|

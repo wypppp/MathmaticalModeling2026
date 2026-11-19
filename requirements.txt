@@ -4,4 +4,7 @@ pandas
 matplotlib
 shapely
 requests
-# gurobipy==13.*   # 按本机 Gurobi 版本取消注释
+gurobipy==13.0.0
+pyomo
+sympy
+openpyxl
