@@ -64,7 +64,7 @@ def _storage(unit: str, remark: str) -> str | None:
     return H[unit][0] if len(H[unit]) == 1 else None
 
 
-def build(k: int = 4):
+def build(k: int = 4, unit_wh: dict | None = None):
     """返回 (batches: dict[int, Batch], blocks: list[Block])。"""
     df = fp.load(k)
     df = df[~df.is_sub].copy()
@@ -89,7 +89,7 @@ def build(k: int = 4):
             else:
                 raise ValueError(f"批{b} 行{r.row}: 收发双方不含执行单位 {r.flow}")
             if w in UNITS:  # 附件2 的内部互转写成 U8（发）-U7（收）：取对方的主队属仓库
-                w = H[w][0]
+                w = (unit_wh or {}).get(w, H[w][0])
             h = _storage(u, rm)
             groups.setdefault((w, d_, h), []).append((r["item"], float(r.qty), rm))
         for (w, d_, h), rows in groups.items():
