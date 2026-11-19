@@ -90,27 +90,44 @@ def trace(blocks2, rows3):
 
 
 def table_order_route(unit, T, groups, D, order):
-    """按表中仓库顺序、不留置、不途经的最短路线；找不到就放宽顺序要求。"""
-    routes = fr.enumerate_routes(unit, T, groups, D, max_km=1e9, allow_leave=False)
+    """录4.3 的口径：按表中仓库顺序、统一行动。确定性构造，不做优化、不检查车上装载量（超载由引擎记录为发现）。
+    驻地 → [有自有送交货或专程取货点：先去装] → 表中各目标仓库（到站先卸后装）→ 剩余卸货点（表中未规定次序，取里程最短的排列）→ 驻地。
+    返回 (steps, 卸货点次序是否唯一, 另一种次序下的里程或 None)。"""
+    import itertools
+    order = [w for i, w in enumerate(order) if w not in order[:i]]
     own = set(fb.H[unit])
-    best = None
-    for strict in (True, False):
-        for steps in routes:
-            if any(not (s.load or s.unload) for s in steps[:-1]):
-                continue
-            seq = [s.node for s in steps[:-1] if s.node not in own]
-            dedup = [n for i, n in enumerate(seq) if i == 0 or seq[i - 1] != n]
-            tg = [n for n in dedup if n in order]
-            if strict and tg != [n for n in order if n in tg]:
-                continue
-            if any(s.load and s.unload and False for s in steps):
-                continue
-            d = sum(float(D.at[a, b]) for a, b in zip([unit] + [s.node for s in steps[:-1]], [s.node for s in steps]))
-            if best is None or d < best[0]:
-                best = (d, steps)
-        if best:
-            return best[1], strict
-    raise RuntimeError("无路线")
+    gs = list(groups.values())
+    pre = []
+    for g in gs:  # 需要在到达目标仓库之前装车的点：自己的队属仓库（送交货）或专程取货的仓库
+        if g.load not in order and g.load not in pre:
+            pre.append(g.load)
+    steps, loaded, done = [], set(), set()
+
+    def visit(n):
+        un = {g.gid: g.s for g in gs if g.gid in loaded and g.gid not in done and g.unload == n}
+        ld = {g.gid: g.s for g in gs if g.gid not in loaded and g.load == n}
+        done.update(un)
+        loaded.update(ld)
+        steps.append(fe.Step(n, unload=un, load=ld))
+
+    for n in pre + order:
+        visit(n)
+    rest = []
+    for g in gs:
+        if g.gid not in done and g.unload not in rest:
+            rest.append(g.unload)
+    last = steps[-1].node if steps else unit
+
+    def length(perm):
+        seq = [last] + list(perm) + [unit]
+        return sum(float(D.at[a, b]) for a, b in zip(seq, seq[1:]) if a != b)
+
+    perms = sorted(itertools.permutations(rest), key=length)
+    for n in perms[0]:
+        visit(n)
+    steps.append(fe.Step(unit))
+    alt = length(perms[-1]) - length(perms[0]) if len(perms) > 1 else 0.0
+    return steps, alt
 
 
 def plan_metrics(tag, assign, batches, blocks, cap, D, start_of, order_of):
@@ -121,9 +138,9 @@ def plan_metrics(tag, assign, batches, blocks, cap, D, start_of, order_of):
     for b, gs in groups.items():
         u = batches[b].unit
         T = fr.batch_T(gs, u)[0]
-        steps, strict = table_order_route(u, T, gs, D, order_of[b])
+        steps, alt = table_order_route(u, T, gs, D, order_of[b])
         plans.append(fe.Plan(b, u, start_of[b], T, steps, tuple(fb.H[u])))
-        meta[b] = (T, strict)
+        meta[b] = (T, alt, " → ".join([u] + [s.node for s in steps]))
     res, whs = fe.simulate(plans, D)
     out = []
     srow = {x["batch"]: x for x in rows_s}
@@ -132,14 +149,15 @@ def plan_metrics(tag, assign, batches, blocks, cap, D, start_of, order_of):
         lo, hi = max(1, bt.a - 6), bt.e
         out.append(dict(batch=b, unit=bt.unit, T=srow[b]["T"], N=srow[b]["N"], P=srow[b]["P"], N_tab=bt.N0, P_tab=bt.P0, targets=srow[b]["targets"],
                         n_targets=srow[b]["n_targets"], a=bt.a, e=bt.e, start=start_of[b], end_sim=r.end_day, tau_sim=r.tau, D=r.D, Lbar=r.Lbar,
-                        veh_km=r.veh_km, delta=abs(start_of[b] - bt.a), in_window=lo <= start_of[b] <= hi, order_strict=meta[b][1], flags=";".join(r.flags)))
+                        veh_km=r.veh_km, delta=abs(start_of[b] - bt.a), in_window=lo <= start_of[b] <= hi, route=meta[b][2], unload_order_gap_km=meta[b][1], overload=";".join(r.flags)))
     df = pd.DataFrame(out)
     df.to_csv(OUT / f"batches_{tag}.csv", index=False, encoding="utf-8-sig")
     veh_over = sum(1 for w in whs.values() for d, v in w.veh.items() if v > 20 + 1e-6)
     summ = dict(方案=tag, 批次=len(df), 运力合计=int(df["T"].sum()), 总车数_统一口径=int(df["N"].sum()), 总人数_统一口径=int(df["P"].sum()),
                 代领代交等效车数=tot["A"], 失衡度=tot["E"], 批次仓库对=int(df.n_targets.sum()), 调运总里程=df.D.sum(), 载货总行驶距离=df.Lbar.sum(),
                 车公里=df.veh_km.sum(), 执行总时间_回放=int(df.tau_sim.sum()), 开始偏离=int(df.delta.sum()), 越窗批次数=int((~df.in_window).sum()),
-                超2000km批次=int((df.D > 2000).sum()), 最大里程=df.D.max())
+                超2000km批次=int((df.D > 2000).sum()), 最大里程=df.D.max(),
+                卸货次序取最长时的总里程=df.D.sum() + df.unload_order_gap_km.sum(), 按表中顺序会超载的批次=int((df.overload.fillna("") != "").sum()))
     return summ, df, flow
 
 
