@@ -1,5 +1,8 @@
 # MathematicalModeling2026
 
+**新窗口入口：`process/比赛作战手册.md` → `AGENTS.md` → `state.md`。**
+
+
 单人 + 双模型（Claude、ChatGPT）数学建模协作仓库。协作规则见 [AGENTS.md](AGENTS.md)。
 
 ## 目录
