@@ -3,7 +3,7 @@
 预注册：evidence.md V20（表列天数 < 回放天数的批次能否从 11 降到 ≤ 3）、V21（越窗 16 批是否稳定）。
 “表列 < 孤立最少天数”一列是看过 V20 结果后加的检验（按表中顺序回放不是下界，换顺序可能更快），不属于预注册。
 只读分析：不改主结果。开关见 f_engine.OPT，默认值 = spec v2.2。
-用法：python src/f_a2.py   → results/F/checks/A2_*.csv
+用法：python src/f_a2.py [dur]   → results/F/checks/A2_*.csv（dur：只做表列天数是否沿用提报时长的检查）
 """
 from __future__ import annotations
 
@@ -151,5 +151,31 @@ def main():
         print(f"批 {b}（附件3 批 {b3}）表中顺序 {S['order3'][b3]} 超载；各排列：", ok)
 
 
+def duration_check():
+    """区分性检查（看过 V20 结果后加的，不属于预注册）：附件 3 的表列天数是否沿用了附件 2 该批的提报时段长度。
+    若是，表列天数不是按时间规则算出来的，对时间规则的哪种读法都不构成证据。读 A2_rules_detail.csv 与 p1/batches_after.csv。"""
+    b = pd.read_csv(ROOT / "results/F/p1/batches_after.csv")
+    d = pd.read_csv(OUT / "A2_rules_detail.csv")
+    x = b[["batch", "batch3", "unit", "a", "e", "start", "tab_days"]].copy()
+    x["sub_len"] = x.e - x.a + 1
+    x["same_len"] = x.tab_days == x.sub_len
+    x["start_eq_a"] = x.start == x.a
+    rows = []
+    for tag in ("spec 默认", "split_legs"):
+        y = d[d["读法"] == tag].set_index("batch3")
+        for col, nm in (("tau_sim", "按表中顺序回放"), ("iso_min", "孤立最少天数")):
+            bad = x[x.tab_days < x.batch3.map(y[col])]
+            rows.append(dict(读法=tag, 口径=nm, 做不到的批数=len(bad), 其中表列天数等于提报时长=int(bad.same_len.sum()), 批次=" ".join(map(str, sorted(bad.batch3)))))
+    x.to_csv(OUT / "A2_duration.csv", index=False, encoding="utf-8-sig")
+    out = pd.DataFrame(rows)
+    out.to_csv(OUT / "A2_duration_summary.csv", index=False, encoding="utf-8-sig")
+    print(f"表列天数 = 提报时段长度：{int(x.same_len.sum())}/{len(x)}；出发日 = 提报开始日：{int(x.start_eq_a.sum())}/{len(x)}")
+    print(out.to_string(index=False))
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "dur":
+        duration_check()
+    else:
+        main()
+        duration_check()
