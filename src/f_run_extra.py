@@ -1,6 +1,6 @@
 """补充实验：问题 3 的消融与合成方式敏感性；代领③的对照与自取量；问题 4 的批次数折衷；口径灵敏度。
 
-用法：python src/f_run_extra.py [p3|r3|p4b|all]
+用法：python src/f_run_extra.py [p3|r3|p4b|rules|all]
 输出：results/F/extra/*.csv
 """
 from __future__ import annotations
@@ -14,6 +14,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 import f_blocks as fb  # noqa: E402
+import f_engine as fe  # noqa: E402
 import f_p2  # noqa: E402
 import f_p3  # noqa: E402
 import f_p4  # noqa: E402
@@ -153,6 +154,28 @@ def p4_batches():
     pd.DataFrame(rows).to_csv(OUT / "p4_batches.csv", index=False, encoding="utf-8-sig")
 
 
+def p3_rules():
+    """A2 的后续：时间规则换成备选读法后，问题 3（同一指派）重新搜索的结果。只读分析，不改主结果。"""
+    rows = []
+    for tag, opt in (("spec 默认", {}), ("split_long（G6 备选）", dict(split_long=True)), ("split_legs（D11 的 b）", dict(split_legs=True)),
+                     ("load_anytime", dict(load_anytime=True)), ("split_long+load_anytime", dict(split_long=True, load_anytime=True)),
+                     ("split_legs+load_anytime", dict(split_legs=True, load_anytime=True))):
+        saved = dict(fe.OPT)
+        fe.OPT.update(opt)
+        try:
+            inst, base, evb = run3(a3)
+            ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+            sol, _ = inst.improve(base, ref)
+            ev = inst.evaluate(sol)
+        finally:
+            fe.OPT.clear()
+            fe.OPT.update(saved)
+        rows.append(dict(读法=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"], V=ev["V"],
+                         基线_天=evb["tau"], 基线_km=evb["L"], 基线_偏离=evb["delta"], 孤立下界_天=inst.lb_tau, 孤立下界_km=inst.lb_L))
+        print(rows[-1])
+    pd.DataFrame(rows).to_csv(OUT / "p3_rules.csv", index=False, encoding="utf-8-sig")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
@@ -163,4 +186,6 @@ if __name__ == "__main__":
         r3_study()
     if what in ("p4b", "all"):
         p4_batches()
+    if what in ("rules", "all"):
+        p3_rules()
     print(f"用时 {time.time() - t0:.0f}s")

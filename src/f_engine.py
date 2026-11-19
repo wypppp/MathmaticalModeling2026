@@ -23,6 +23,15 @@ DAY_KM = 500.0
 UNIT_CAP = 3
 EPS = 1e-9
 
+# 读法开关（A 层检查 A2 用）。默认值 = spec v2.2，主结果只在默认值下产生。
+OPT = dict(
+    split_legs=False,    # True：任何路段都可随时出发，行驶到 16:00 停、次日 8:00 续行（S6/G6 的备选）
+    split_long=False,    # True：只对 > 500 km 的路段允许随时出发、途中过夜（即 §6 G6 的敏感性）
+    no_ceil=False,       # True：作业车数 c = s⁺ + s⁻ 不取整（G7/G15 的备选）
+    load_anytime=False,  # True：装卸不受 8:00–16:00 限制，连续作业（录3.9“不考虑仓库的工作时段”的备选读法）
+    no_wh_cap=False,     # True：仓库不排队、无日容量（S8/S9 关闭，诊断用）
+)
+
 
 def ceil_(x: float) -> int:
     return int(math.ceil(x - 1e-9))
@@ -84,6 +93,14 @@ def travel(t: tuple, dist: float):
     if dist <= EPS:
         return (d, h), (d, h)
     hrs = dist / SPEED
+    if OPT["split_legs"] or (OPT["split_long"] and dist > DAY_KM + EPS):
+        if h >= DAY_H - EPS:
+            d, h = d + 1, 0.0
+        dep, rem = (d, h), hrs
+        while h + rem > DAY_H + EPS:
+            rem -= DAY_H - h
+            d, h = d + 1, 0.0
+        return dep, (d, h + rem)
     if dist <= DAY_KM + EPS:
         if h + hrs <= DAY_H + EPS:
             return (d, h), (d, min(DAY_H, h + hrs))
@@ -103,11 +120,21 @@ class Warehouse:
 
     def serve(self, bid, unit, arrive, c, queued=True):
         """从 arrive 起服务 c 台次；返回 (开始, 结束)。queued=False 时不排队、不计容量（自己的队属仓库）。"""
+        queued = queued and not OPT["no_wh_cap"]
         t = max(arrive, self.free_at) if queued else arrive
         d, h = t
         rem, start = float(c), None
         if c == 0:
             return t, t
+        if OPT["load_anytime"]:  # 连续作业；h 以当天 8:00 起算，24 小时进一日；不计日容量
+            start = (d, h)
+            h += rem / RATE
+            while h >= 24 - EPS:
+                d, h = d + 1, h - 24
+            end = (d, h) if h <= DAY_H + EPS else (d + 1, 0.0)
+            if queued:
+                self.free_at = end
+            return start, end
         while rem > EPS:
             if h >= DAY_H - EPS:
                 d, h = d + 1, 0.0
@@ -151,7 +178,7 @@ def simulate(plans: list, dist) -> tuple:
             s["onboard"].update(grp)
             s["moving_T"] += ceil_(sum(grp.values())) if grp else 0
         su, sl = sum(step.unload.values()), sum(step.load.values())
-        cu, cl = ceil_(su), ceil_(sl)
+        cu, cl = (su, sl) if OPT["no_ceil"] else (ceil_(su), ceil_(sl))
         queued = step.node.startswith("W") and step.node not in p.own_wh
         if cu + cl > 0:
             wh = whs.setdefault(step.node, Warehouse())
