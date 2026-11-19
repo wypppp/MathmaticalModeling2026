@@ -14,6 +14,7 @@
 - 转换稿 `problem/F/F.md`（两处公式图已渲染核对，图在 `problem/F/figs/`）；数据摘要 `problem/F/数据摘要.md`
 - 解析器 `src/f_parse.py`（路径改为 original/附件；修复附件4 半角括号导致收发方解析失败），长表在 `results/F/parsed/`
 - 独立读题稿 `review/claude_G0_spec.md`（独立完成后已提交 4bed68d）
+- G2 三方路线稿到齐，裁决单 `review/G2_compare.md`（8 条一致、3 条待裁决、8 条单方独有）
 - G2：Claude 路线稿 `review/claude_G2_routes.md`；G3 检验标准 V1–V19 已预注册进 `evidence.md`（早于任何正式运行）
 - G1 三方网格到齐；裁决单 `review/G1_compare.md`（13 条已互证的洞察、3 条待裁决、8 条单方独有）；洞察登记 `review/insights.md`（12 条候选）
 - G1：统一行列清单 `review/G1_grid.md`；需求块构造 `src/f_blocks.py`（Y2 = 90 块）；Claude 的网格稿（初步：批次下界 28、简化整数规划 31 批，均未进 evidence）
@@ -21,9 +22,9 @@
 - 四方稿到齐（人、Claude、GPT、千问），裁决单 `review/G0_compare.md` v2（已并入人补全后的初稿）：一致点、12 条数据定案的事实、22 条分歧（D1–D22）、15 条单方独有点
 
 ## 下一步
-1. GPT、Gemini：各自独立写 G2 路线稿（结构分析、6–8 个方向、推荐基线/主路线/挑战路线），`review/<模型>_G2_routes.md`（Claude 的已完成）
-2. Claude Code：三方到齐后整理 `review/G2_compare.md` → 人裁决 → 写摘要草稿、章节骨架、证据清单（数字占位）
-3. Claude Code 同时做（不依赖裁决）：G3 的预注册检验标准、时间引擎与独立检查器、问题 1 逐批对照
+1. **人：裁决 `review/G2_compare.md` §3 的 J1、J2、J3**
+2. Claude Code：裁决后写摘要草稿、章节骨架、证据清单（`paper/`，数字占位）
+3. Claude Code 正在做（不依赖裁决）：指标模块 → 时间引擎 → 结果表导出与独立检查器 → 问题 2 候选集与整数规划 → 问题 3 基线 → 问题 1 逐块对账
 4. **硬节点：第 2 天结束前，四个问题的基线端到端跑通并输出结果文件**
 
 ## 决策记录
