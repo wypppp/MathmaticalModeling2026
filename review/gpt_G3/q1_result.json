@@ -1,0 +1,60 @@
+{
+  "lp": {
+    "cost_yuan": 35118.59858928961,
+    "soc_start_kwh": 8550.0,
+    "soc_end_kwh": 8550.0,
+    "charge_cap_slots": 19,
+    "solver_status": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+    "mip_gap": null,
+    "max_residuals": {
+      "balance_kwh": 1.1368683772161603e-13,
+      "soc_step_kwh": 8.810729923425242e-13,
+      "soc_cycle_kwh": 0.0,
+      "soc_bound_kwh": 0.0,
+      "power_bound_kwh": 0.0,
+      "nonnegative_kwh": 0.0,
+      "overlap_kwh": 0.0,
+      "objective_yuan": 1.4551915228366852e-11
+    }
+  },
+  "fixed_soc_lp": {
+    "cost_yuan": 35126.94858928963,
+    "soc_start_kwh": 6000.0,
+    "soc_end_kwh": 6000.0,
+    "charge_cap_slots": 19,
+    "solver_status": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+    "mip_gap": null,
+    "max_residuals": {
+      "balance_kwh": 1.1368683772161603e-13,
+      "soc_step_kwh": 8.810729923425242e-13,
+      "soc_cycle_kwh": 0.0,
+      "soc_bound_kwh": 0.0,
+      "power_bound_kwh": 0.0,
+      "nonnegative_kwh": 0.0,
+      "overlap_kwh": 0.0,
+      "objective_yuan": 7.275957614183426e-12
+    }
+  },
+  "exclusive_milp": {
+    "cost_yuan": 35118.59858928963,
+    "soc_start_kwh": 8550.0,
+    "soc_end_kwh": 8550.0,
+    "charge_cap_slots": 19,
+    "solver_status": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+    "mip_gap": 0.0,
+    "max_residuals": {
+      "balance_kwh": 1.1368683772161603e-13,
+      "soc_step_kwh": 8.810729923425242e-13,
+      "soc_cycle_kwh": 0.0,
+      "soc_bound_kwh": 0.0,
+      "power_bound_kwh": 0.0,
+      "nonnegative_kwh": 0.0,
+      "overlap_kwh": 0.0,
+      "objective_yuan": 0.0
+    }
+  },
+  "r1_yuan": 35118.5986,
+  "lp_minus_r1_yuan": -1.0710384231060743e-05,
+  "milp_minus_lp_yuan": 1.4551915228366852e-11,
+  "fixed_soc_extra_yuan": 8.350000000013097
+}

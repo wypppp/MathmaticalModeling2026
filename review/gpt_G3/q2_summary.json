@@ -1,0 +1,47 @@
+{
+  "days": 334,
+  "slots": 48096,
+  "days_within_relaxation": 334,
+  "issues": {
+    "plan_energy": {
+      "within_rounding": 294
+    },
+    "plan_fee": {
+      "within_rounding": 334
+    },
+    "soc_day_recurrence": {
+      "within_rounding": 331
+    },
+    "soc_block_boundary": {
+      "within_rounding": 190
+    },
+    "implied_daily_spill_nonnegative": {
+      "within_rounding": 4
+    }
+  },
+  "max_abs_soc_recurrence_abs_kwh": {
+    "date": "2025-12-08",
+    "value": 0.0003300000025774352
+  },
+  "max_abs_soc_cross_day_abs_kwh": {
+    "date": "2025-02-02",
+    "value": 0.0
+  },
+  "max_abs_plan_energy_delta_kwh": {
+    "date": "2025-12-06",
+    "value": 0.0012999999889871106
+  },
+  "max_abs_plan_fee_delta_yuan": {
+    "date": "2025-07-14",
+    "value": 0.0009080299860215746
+  },
+  "plan_fee_recomputed_yuan": 12234647.16944667,
+  "plan_fee_reported_yuan": 12234647.207999997,
+  "emergency_kwh": 799758.3582,
+  "emergency_fee_lower_yuan": 3049132.5659070145,
+  "emergency_fee_upper_yuan": 3871359.234817299,
+  "total_fee_lower_yuan": 15283777.892802604,
+  "total_fee_upper_yuan": 16106008.246815063,
+  "implied_spill_kwh": 1781989.5829333332,
+  "implied_spill_uncertainty_kwh": 2.7366
+}
