@@ -5,18 +5,19 @@
 ## 当前
 - 赛题：2026 国赛 B 题（无线电干扰源的快速自动定位与清除），用作赛前演练
 - 演练目标：只测两件事 ①题意守恒 ②主工程能否从方案跑到可信数值
-- 当前阶段：G0 读题
+- 当前阶段：G1 题意守恒与盲点检查（G0 已完成，spec.md v1）
 - 主工程方：待定（演练中实测）
 - 审查方：待定
 
 ## 下一步
-1. 人独立读题，写 `notes/human_G0.md`（目标、约束、疑问、直觉想法）
-2. ~~Claude~~（已完成 `review/claude_G0_spec.md`）、GPT 分别独立写 `review/claude_G0_spec.md`、`review/gpt_G0_spec.md`，互不读取
-3. 人对比三份，裁决分歧，合并成 `spec.md` v1
+1. GPT 独立写 `review/gpt_G1_blindspots.md`（出题人意图 / 事前验尸 / 演练效度风险），完成前不读 claude_G1_blindspots.md
+2. Claude 出 `review/G1_compare.md` 裁决单，GPT 审转述
+3. 人裁决 → spec.md v2 冻结 → 进入 G2
 
 ## 决策记录
 | 日期 | 决策 | 理由 | 决策人 |
 |---|---|---|---|
+| 2026-11-19 | G0 裁决单 D1–D14 全部采用默认（D4/D7/D14 按 GPT 审核修正） | 见 review/G0_compare.md | 人 |
 
 ## 未解决问题
 - 官方模拟器已不可用（截止 2026-09-13、需队号登录、仅本机回环）。Q3/Q4 拟按附件2复刻模拟器，复刻假设见 claude_G0_spec.md §6.2，待人确认
