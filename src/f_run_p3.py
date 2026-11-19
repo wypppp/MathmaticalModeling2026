@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 import f_blocks as fb  # noqa: E402
 import f_engine as fe  # noqa: E402
+import f_export  # noqa: E402
+import f_p2  # noqa: E402
 import f_p3  # noqa: E402
 import f_parse as fp  # noqa: E402
 
@@ -90,6 +92,16 @@ def main():
     for name, e in (("基线", evb), ("坐标下降", ev1), ("主路线（加成对邻域）", ev)):
         summ.append(dict(name=name, tau=e["tau"], L=e["L"], delta=e["delta"], V=e["V"], D=e["D"], veh_km=e["veh_km"], score=inst.score(e, ref)[0], feasible=e["feasible"]))
     pd.DataFrame(summ).to_csv(OUT / "summary.csv", index=False, encoding="utf-8-sig")
+    # 结果表：附件 6（问题 2）与附件 7（问题 3）用同一套新批次号
+    new_id = f_export.renumber(inst.ids, {b: sol[b][1] for b in inst.ids})
+    pd.DataFrame([dict(new_batch=new_id[b], orig_batch=b, unit=batches[b].unit) for b in sorted(inst.ids, key=lambda x: new_id[x])]).to_csv(
+        OUT / "batch_id_map.csv", index=False, encoding="utf-8-sig")
+    rows, tot, _ = f_p2.summarize(assign, batches, blocks, cap)
+    tnp = {x["batch"]: (x["T"], x["N"], x["P"]) for x in rows}
+    f_export.write_p2(ROOT / "results" / "F" / "问题2_results.xlsx", assign, batches, blocks, cap, new_id, tnp)
+    f_export.write_p3(ROOT / "results" / "F" / "问题3_results.xlsx", 7, inst, sol, ev, new_id)
+    print("附表2:", dict(批次=tot["B"], 总车数=tot["N"], 总人数=tot["P"], 代领代交等效车数=round(tot["A"], 3)))
+    print("附表3:", dict(执行总时间=ev["tau"], 开始偏离=ev["delta"], 总里程=ev["D"], 载货总行驶距离=round(ev["L"], 3)))
     print(pd.DataFrame(summ).to_string(index=False))
 
 
