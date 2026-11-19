@@ -14,14 +14,15 @@
 - 转换稿 `problem/F/F.md`（两处公式图已渲染核对，图在 `problem/F/figs/`）；数据摘要 `problem/F/数据摘要.md`
 - 解析器 `src/f_parse.py`（路径改为 original/附件；修复附件4 半角括号导致收发方解析失败），长表在 `results/F/parsed/`
 - 独立读题稿 `review/claude_G0_spec.md`（独立完成后已提交 4bed68d）
+- G1 三方网格到齐；裁决单 `review/G1_compare.md`（13 条已互证的洞察、3 条待裁决、8 条单方独有）；洞察登记 `review/insights.md`（12 条候选）
 - G1：统一行列清单 `review/G1_grid.md`；需求块构造 `src/f_blocks.py`（Y2 = 90 块）；Claude 的网格稿（初步：批次下界 28、简化整数规划 31 批，均未进 evidence）
 - `spec.md` v1：按裁决生成，10 条自补假设单列（§6），其中 5 条安排了敏感性分析
 - 四方稿到齐（人、Claude、GPT、千问），裁决单 `review/G0_compare.md` v2（已并入人补全后的初稿）：一致点、12 条数据定案的事实、22 条分歧（D1–D22）、15 条单方独有点
 
 ## 下一步
-1. GPT、Gemini：按 `review/G1_grid.md` 各自独立填 N1–N5，写入 `review/gpt_G1_grids.md`、`review/gemini_G1_grids.md`（Claude 的已完成：`review/claude_G1_grids.md`）
-2. Claude Code：三方到齐后逐格取并集 → `review/G1_compare.md` 裁决单 + `review/insights.md` → 人裁决 → spec v2
-3. Claude Code 同时做：问题 1 的件2→件3 逐批精确对照、独立检查器骨架（只读结果 xlsx）
+1. **人：裁决 `review/G1_compare.md` §3 的 K1、K2、K3**（回复“全部默认”或“除了 Kx 选 b”）
+2. Claude Code：裁决后 spec 升 v2 并冻结 → G2 路线（三方独立：结构分析、方向、基线/主路线/挑战路线）
+3. Claude Code 同时做：问题 1 的件2→件3 逐批精确对照、独立检查器骨架
 
 ## 决策记录
 | 日期 | 决策 | 理由 | 决策人 |
@@ -40,3 +41,5 @@
 ## 失误台账（只记严重错误）
 | 类别 S/M/E/P | 描述 | 严重程度 | 发现者 | 发现阶段 | 是否已解决 |
 |---|---|---|---|---|---|
+| E | Claude 把“U1 与 U7 这对单位的最小距离 150”误读成 U1–WU=150（实为 245，150 来自 WQ），写进了 G0、G1 稿 | 低（结论不变） | GPT、Gemini | G1 | 是（已更正） |
+| M | Claude 的批次数下界 28 用了不严格的筛选（“块 > 3 台即不可转”），且候选集未实现内部互转反转 | 中（若进论文会成为错误结论） | GPT | G1 | 采用 GPT 的 27；G3 重写候选集 |
