@@ -17,7 +17,10 @@ LAST_DAY = 91
 
 
 class Instance:
-    def __init__(self, assign, batches, blocks, cap, D, cache=None):
+    def __init__(self, assign, batches, blocks, cap, D, cache=None, cand_filter=None, early=6, agg="sum"):
+        """cand_filter：对候选路线的过滤（消融用；与 cache 同用时须为每种过滤单独建 cache）。early：最多可提前的天数。
+        agg：三项的合成方式，"sum" 等权和 / "minimax" 先比最差项再比总和 / (w1,w2,w3) 加权和。"""
+        self.early, self.agg = early, agg
         self.assign, self.batches, self.blocks, self.cap, self.D = assign, batches, blocks, cap, D
         self.groups = fr.batch_groups(assign, batches, blocks, cap)
         self.ids = sorted(self.groups)
@@ -37,11 +40,14 @@ class Instance:
                 ev = fr.evaluate(b, u, T, steps, D)
                 if ev["ok"]:
                     ev["steps"] = steps
+                    ev["n_noop"] = sum(1 for s in steps[:-1] if not (s.load or s.unload or s.rejoin))
                     acts = [s for s in steps[:-1]]
                     ev["n_pass"] = sum(1 for s in acts if not (s.load or s.unload or s.rejoin))
                     tg = [s.node for s in acts if (s.load or s.unload) and s.node not in fb.H[u]]
                     ev["n_revisit"] = len(tg) - len(set(tg))
                     allr.append(ev)
+            if cand_filter is not None:
+                allr = [e for e in allr if cand_filter(e)]
             if not allr:
                 if cache is not None:
                     cache[sig] = ([], -1)
@@ -77,7 +83,7 @@ class Instance:
 
     def window(self, b):
         bt = self.batches[b]
-        return max(1, bt.a - 6), bt.e
+        return max(1, bt.a - self.early), bt.e
 
     def plans(self, sol):
         out = []
@@ -182,11 +188,15 @@ class Instance:
     # ---------- 主路线：坐标下降 ----------
     def score(self, ev, ref):
         """J1：区间归一化等权和；ref = dict(l=(tau,L,delta), u=(tau,L,delta))。"""
-        z = 0.0
+        zs = []
         for key, l, u in zip(("tau", "L", "delta"), ref["l"], ref["u"]):
             den = (u - l) if u - l > 1e-9 else 1.0
-            z += (ev[key] - l) / den
-        return z, ev["V"]
+            zs.append((ev[key] - l) / den)
+        if self.agg == "sum":
+            return sum(zs), ev["V"]
+        if self.agg == "minimax":
+            return max(zs) + 1e-6 * sum(zs), ev["V"]
+        return sum(w * z for w, z in zip(self.agg, zs)), ev["V"]
 
     def improve(self, sol, ref, max_sweeps=20, log=None):
         sol = dict(sol)

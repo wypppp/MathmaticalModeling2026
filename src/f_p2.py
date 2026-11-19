@@ -22,7 +22,7 @@ import f_blocks as fb
 NEAR = 150
 
 
-def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True):
+def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True, allow_R3=True):
     """块 k 的全部候选转移项（不含 'own'）。"""
     y = k.owner
     out = []
@@ -42,7 +42,7 @@ def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=N
                         out.append(("T", bt.id, "R2", None))
                     else:
                         for hx in sorted(own_unload):
-                            if D.at[y, hx] <= near:
+                            if allow_R3 and D.at[y, hx] <= near:
                                 out.append(("T", bt.id, "R3", hx))
                             if allow_R4:
                                 for b2 in batches.values():
@@ -71,13 +71,13 @@ def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=N
 
 
 def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True,
-          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max"):
+          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max", allow_R3=True):
     """返回 dict(assign={块id: 选项}, stats=..., status=...)。forbid：若干选项集合，每个集合不得同时全选。
     fix_batches：把批次数固定为给定值（做折衷曲线时用）；此时 levels 中的 'B' 被跳过。"""
     m = gp.Model("p2")
     m.Params.OutputFlag = 1 if verbose else 0
     m.Params.MIPGap = 0.0
-    opts = {k.id: [("own",)] + options(k, batches, blocks, cap, D, allow_R4, only_shared, near, allow_rev) for k in blocks}
+    opts = {k.id: [("own",)] + options(k, batches, blocks, cap, D, allow_R4, only_shared, near, allow_rev, allow_R3) for k in blocks}
     z = {(kid, o): m.addVar(vtype="B") for kid, os in opts.items() for o in os}
     y = {b: m.addVar(vtype="B") for b in batches}
     own_at = defaultdict(list)  # (批次, 仓库) -> 自有块

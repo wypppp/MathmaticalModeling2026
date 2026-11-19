@@ -16,10 +16,10 @@ import f_p3
 
 
 class P4:
-    def __init__(self, batches, blocks, cap, D, n_batches, ref3, ref_E, ref_W, u9_min, log=print):
+    def __init__(self, batches, blocks, cap, D, n_batches, ref3, ref_E, ref_W, u9_min, log=print, **opt_kw):
         self.batches, self.blocks, self.cap, self.D = batches, blocks, cap, D
         self.nB, self.ref3, self.ref_E, self.ref_W, self.u9_min, self.log = n_batches, ref3, ref_E, ref_W, u9_min, log
-        self.opts = {k.id: [("own",)] + f_p2.options(k, batches, blocks, cap, D) for k in blocks}
+        self.opts = {k.id: [("own",)] + f_p2.options(k, batches, blocks, cap, D, **opt_kw) for k in blocks}
         self.cache = {}
         self.own_at, self.own_unl = {}, {}
         for k in blocks:
