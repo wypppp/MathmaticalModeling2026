@@ -13,7 +13,8 @@
 1. G0 完成，spec v1 已生成
 2. ~~G1~~ 完成（E1–E9 全部默认），spec v2 冻结
 3. ~~G2~~ 完成
-4. G3 第一批（进行中）：回测器 + 检查器 → Q1 → Q2 基线
+4. ~~G3 第一批~~ 完成：回测器 + 检查器（7 项测试）、Q1（已验证）、Q2 基线端到端（已验证），见 evidence R1–R4
+5. 下一步：GPT 独立复算 Q1、独立重写台账检查器复核 Q2 基线；第三方按 spec 写测试用例；Claude 开始做 Q2 主路线（P1 预测 + S1 场景 + C2 随机规划 + X1 滚动执行 + H2 日末处理）
 3. （历史）G1：三个模型各自独立填写 N1–N5 洞察网格（`review/<模型>_G1_grids.md`），并按 §3.1 清单做盲点检查；行列清单由 Claude 先给出，见 `review/G1_grid_rows.md`
 2. Claude、GPT 独立写 `review/<模型>_G0_spec.md`；第三方按 G0/G1 外审
 3. Claude 出 G0_compare，人裁决 → spec v1
