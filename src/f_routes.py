@@ -2,9 +2,11 @@
 
 货组 = (装车点, 卸车点) 相同的货；路线 = 车队依次到访的站点及在每站的卸、装、留置、汇合动作。
 枚举规则：
-- 到站先汇合（若此前在该站留置过）、再卸下目的地为该站的全部货、再装该站全部待装货；
-- 装完后可选择把“刚装的货”留置在该站（之后必须回来汇合），这同时覆盖了 K1 的“重复到访”；
-- 不做无动作的到访；每个站点至多到访 MAX_VISIT 次；里程超过上限的剪掉；行驶车队装载量不超过其车数。
+- 到站先汇合（若此前在该站留置过）、再卸下目的地为该站的全部货、再装该站待装货的任一子集（其余留到下次到访再装）；
+- 装完后可选择把刚装的货的任一子集留置在该站（之后必须回来汇合）；
+- 每个站点至多“有动作地”到访 MAX_VISIT 次；里程超过上限的剪掉；行驶车队装载量不超过其车数；
+- S15：两个作业站之间可以途经本批次自己的站点（驻地、执行单位可用的队属仓库、本批次涉及的仓库）而不作业。
+  实现：在这些站点构成的子图上取最短路，途经点作为无动作的 Step 写进路线（里程、时间逐段计算）。
 """
 from __future__ import annotations
 
@@ -89,25 +91,47 @@ def _is_send(g, own):
     return False
 
 
+def _subsets(xs):
+    xs = list(xs)
+    return [tuple(x for i, x in enumerate(xs) if m >> i & 1) for m in range(1 << len(xs))]
+
+
 def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
     """返回完整路线列表，每条为 list[fe.Step]（末尾为回驻地）。"""
     gids = list(groups)
     s = {g: groups[g].s for g in gids}
     res = []
+    # S15：允许途经的站点集合及其上的最短路
+    nodes = sorted({unit} | set(fb.H[unit]) | {g.load for g in groups.values()} | {g.unload for g in groups.values()})
+    dc = {(a, b): (0.0 if a == b else float(D.at[a, b])) for a in nodes for b in nodes}
+    nxt = {(a, b): b for a in nodes for b in nodes}
+    for k in nodes:
+        for a in nodes:
+            for b in nodes:
+                if dc[a, k] + dc[k, b] < dc[a, b] - 1e-9:
+                    dc[a, b] = dc[a, k] + dc[k, b]
+                    nxt[a, b] = nxt[a, k]
+
+    def via(a, b):
+        """a 到 b 最短路上的途经点（不含 a、b），作为无动作 Step。"""
+        out, cur = [], a
+        while nxt[cur, b] != b:
+            cur = nxt[cur, b]
+            out.append(fe.Step(cur))
+        return out
 
     def dfs(pos, pending, onboard, left, visits, dist, movT, steps):
         if dist > max_km + 1e-9:
             return
         if not pending and not onboard and not left:
-            d = float(D.at[pos, unit]) if pos != unit else 0.0
+            d = dc[pos, unit]
             if dist + d <= max_km + 1e-9:
-                res.append(steps + [fe.Step(unit)])
+                res.append(steps + via(pos, unit) + [fe.Step(unit)])
             return
         cand = {groups[g].unload for g in onboard} | {groups[g].load for g in pending} | set(left)
         for n in sorted(cand):
             if n == pos or visits.get(n, 0) >= MAX_VISIT:
                 continue
-            d = float(D.at[pos, n])
             ob, lf, mT = set(onboard), dict(left), movT
             rejoin = n in lf
             if rejoin:
@@ -116,23 +140,34 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
                 mT += fe.ceil_(sum(s[g] for g in grp))
             un = {g for g in ob if groups[g].unload == n}
             ob -= un
-            ld = {g for g in pending if groups[g].load == n}
-            if not (rejoin or un or ld):
-                continue
+            ld_all = sorted(g for g in pending if groups[g].load == n)
             v2 = dict(visits)
             v2[n] = v2.get(n, 0) + 1
-            pend2 = pending - ld
-            base = dict(node=n, unload={g: s[g] for g in sorted(un)}, load={g: s[g] for g in sorted(ld)}, rejoin=rejoin)
-            # 方案一：装上带走
-            if sum(s[g] for g in ob | ld) <= mT + 1e-9:
-                dfs(n, pend2, ob | ld, lf, v2, dist + d, mT, steps + [fe.Step(**base)])
-            # 方案二：装上后留置（之后回来汇合）
-            if allow_leave and ld and pend2 and n not in lf and v2[n] < MAX_VISIT and not any(groups[g].unload == n for g in ld):
-                c = fe.ceil_(sum(s[g] for g in ld))
-                if c <= mT and sum(s[g] for g in ob) <= mT - c + 1e-9:
+            may_defer = v2[n] < MAX_VISIT
+            legs = [(dc[pos, n], via(pos, n))]
+            if float(D.at[pos, n]) > dc[pos, n] + 1e-9:
+                legs.append((float(D.at[pos, n]), []))  # 直达虽远，但可能少跨一天
+            for S in _subsets(ld_all):
+                if len(S) < len(ld_all) and not may_defer:
+                    continue
+                if not (rejoin or un or S):
+                    continue
+                Sset = set(S)
+                pend2 = pending - Sset
+                base = dict(node=n, unload={g: s[g] for g in sorted(un)}, load={g: s[g] for g in S}, rejoin=rejoin)
+                leave_opts = [()]
+                if allow_leave and S and pend2 and n not in lf and may_defer:
+                    leave_opts += [L for L in _subsets(S) if L]
+                for L in leave_opts:
+                    Lset = set(L)
+                    c = fe.ceil_(sum(s[g] for g in L)) if L else 0
+                    if c > mT or sum(s[g] for g in (ob | Sset) - Lset) > mT - c + 1e-9:
+                        continue
                     lf2 = dict(lf)
-                    lf2[n] = set(ld)
-                    dfs(n, pend2, ob, lf2, v2, dist + d, mT - c, steps + [fe.Step(leave=sorted(ld), **base)])
+                    if L:
+                        lf2[n] = Lset
+                    for d, pre in legs:
+                        dfs(n, pend2, (ob | Sset) - Lset, lf2, v2, dist + d, mT - c, steps + pre + [fe.Step(leave=sorted(L), **base)])
 
     dfs(unit, frozenset(gids), set(), {}, {}, 0.0, T, [])
     return res

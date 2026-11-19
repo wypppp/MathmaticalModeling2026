@@ -1,0 +1,40 @@
+﻿field,reference,recomputed_or_feasible
+batch 1 min_Lbar,265.26762752832855,244.82112033243405
+batch 7 min_D,1534.0,1474
+batch 7 min_Lbar,489.6652107512841,429.6652107512841
+batch 8 min_D,1064.0,1038
+batch 8 min_Lbar,485.8695389112323,430.3043083668485
+batch 9 min_D,1028.0,908
+batch 9 min_tau,5,4
+batch 9 min_Lbar,477.0,417.0
+batch 10 min_D,224.0,220
+batch 10 min_Lbar,114.0,110.0
+batch 13 min_D,1182.0,1127
+batch 13 min_Lbar,552.2811836876278,522.2811836876278
+batch 15 min_D,744.0,468
+batch 15 min_tau,3,2
+batch 15 min_Lbar,510.00000000000006,234.0
+batch 16 min_D,630.0,596
+batch 16 min_Lbar,300.0,283.0
+batch 18 min_D,1961.0,1872
+batch 18 min_Lbar,712.5986289209958,703.5821632291409
+batch 20 min_D,835.0,832
+batch 20 min_Lbar,393.67664668752207,386.628009270428
+batch 21 min_D,539.0,528
+batch 21 min_Lbar,275.0,264.0
+batch 22 min_D,539.0,528
+batch 22 min_Lbar,275.0,264.0
+batch 23 min_D,550.0,530
+batch 23 min_Lbar,194.0,184.0
+batch 25 min_Lbar,719.5262781644386,559.5582216341945
+batch 30 min_Lbar,493.9650928855859,493.817867347177
+batch 32 min_D,1218.0,1193
+batch 32 min_Lbar,512.0306589765434,489.5001077445791
+batch 33 min_Lbar,714.6667674172586,668.6667674172586
+batch 34 min_D,407.0,340
+batch 34 min_Lbar,236.99999999999997,170.0
+batch 36 min_D,577.0,574
+batch 36 min_Lbar,290.0,287.0
+main max_minD (S15),1961.0,1872
+main sum_min_tau,126.0,124
+main sum_min_Lbar,13197.219949287972,12327.497275138123
