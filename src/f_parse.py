@@ -48,7 +48,7 @@ def parse_time(v):
     if isinstance(v, (int, float)):
         d = dt.date(1899, 12, 30) + dt.timedelta(days=int(v))
         return (d.month, d.day), (d.month, d.day)
-    m = re.findall(r"(\d+)月(\d+)日", str(v))
+    m = re.findall(r"(\d+)月(\d+)日?", str(v))  # 附件 2、4 有“4月14至4月20日”这种开始日省略“日”字的写法
     if len(m) == 2:
         return (int(m[0][0]), int(m[0][1])), (int(m[1][0]), int(m[1][1]))
     if len(m) == 1:

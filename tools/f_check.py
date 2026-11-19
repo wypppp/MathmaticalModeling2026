@@ -74,10 +74,9 @@ def read_demand():
             d0 = dt.date(1899, 12, 30) + dt.timedelta(days=int(t))
             a = e = md_day(d0.month, d0.day)
         else:
-            mm = re.findall(r"(\d+)月(\d+)日", str(t)) or re.findall(r"(\d+)月(\d+)", str(t))
+            mm = re.findall(r"(\d+)\s*月\s*(\d+)", str(t))  # 不依赖“日”字（有“4月14至4月20日”的写法）
             if len(mm) == 1:
-                m2 = re.findall(r"至(\d+)月(\d+)", str(t))
-                mm = mm + m2 if m2 else mm * 2
+                mm = mm * 2
             a, e = md_day(int(mm[0][0]), int(mm[0][1])), md_day(int(mm[1][0]), int(mm[1][1]))
         info.setdefault(b, dict(unit=u, a=a, e=e, T0=0))
         tk = top.get((r, 8), (r, 8))
