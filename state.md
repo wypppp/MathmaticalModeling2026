@@ -14,6 +14,7 @@
 - 转换稿 `problem/F/F.md`（两处公式图已渲染核对，图在 `problem/F/figs/`）；数据摘要 `problem/F/数据摘要.md`
 - 解析器 `src/f_parse.py`（路径改为 original/附件；修复附件4 半角括号导致收发方解析失败），长表在 `results/F/parsed/`
 - 独立读题稿 `review/claude_G0_spec.md`（独立完成后已提交 4bed68d）
+- G2：Claude 路线稿 `review/claude_G2_routes.md`；G3 检验标准 V1–V19 已预注册进 `evidence.md`（早于任何正式运行）
 - G1 三方网格到齐；裁决单 `review/G1_compare.md`（13 条已互证的洞察、3 条待裁决、8 条单方独有）；洞察登记 `review/insights.md`（12 条候选）
 - G1：统一行列清单 `review/G1_grid.md`；需求块构造 `src/f_blocks.py`（Y2 = 90 块）；Claude 的网格稿（初步：批次下界 28、简化整数规划 31 批，均未进 evidence）
 - `spec.md` v1：按裁决生成，10 条自补假设单列（§6），其中 5 条安排了敏感性分析
