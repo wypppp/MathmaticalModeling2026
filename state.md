@@ -58,7 +58,7 @@
 - 四方稿到齐（人、Claude、GPT、千问），裁决单 `review/G0_compare.md` v2（已并入人补全后的初稿）：一致点、12 条数据定案的事实、22 条分歧（D1–D22）、15 条单方独有点
 
 ## 下一步
-0. **A 层（题意有效性）验证方案待人裁决**：`review/A_layer_plan.md`（A1–A5，预注册 V20–V25，Q1–Q4）。批准后先做 A2（用附件 3 当裁判切换读法）、A3（杠杆授权表）
+0. **A 层：新裁决单 T1–T4 待人裁决**（`review/A_layer_report.md`；T1 时间规则读法为“人重点看”）。A2、A3 已完成（R16–R18，V20、V23 报警，V21、V22 通过）；A4 覆盖检查、A1（等官网原件）、A5（并进 Gemini G4）未做。R16–R18 与 R13–R15 一起进 GPT 复算队列。方案见 `review/A_layer_plan.md`（人已裁“全部默认”）
 1. **第三方 Gemini 补做**（人转交材料，产出放 `review/gemini_<阶段>_*.md`）：
    - G4 语义审计：给 `spec.md` + `src/f_*.py` + `tools/f_check.py`，不给讨论记录；逐条核对代码有没有放松约束、口径不一致
    - G3 测试用例（补）：只给 `spec.md`；写边界、退化、对抗算例及期望性质，由 Claude Code 运行

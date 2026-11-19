@@ -1,6 +1,7 @@
 """A 层检查 A2：用出题人给的附件 3（业务人员的真实方案）当裁判，切换时间规则的读法，看哪种读法与表列数据最吻合。
 
 预注册：evidence.md V20（表列天数 < 回放天数的批次能否从 11 降到 ≤ 3）、V21（越窗 16 批是否稳定）。
+“表列 < 孤立最少天数”一列是看过 V20 结果后加的检验（按表中顺序回放不是下界，换顺序可能更快），不属于预注册。
 只读分析：不改主结果。开关见 f_engine.OPT，默认值 = spec v2.2。
 用法：python src/f_a2.py   → results/F/checks/A2_*.csv
 """
@@ -73,11 +74,27 @@ def build_plans(S, order_override=None):
     return plans
 
 
+_ROUTES = {}
+
+
+def iso_min_days(S, b):
+    """该批在 spec S15 路线空间内（任意顺序、途经、留置）孤立执行的最少天数；与表中顺序无关。在当前 fe.OPT 下计算。"""
+    gs = S["groups"][b]
+    u = S["B2"][b].unit
+    T = fr.batch_T(gs, u)[0]
+    if b not in _ROUTES:
+        _ROUTES[b] = fr.enumerate_routes(u, T, gs, S["D"], max_km=4000)
+    st = S["start3"][S["b2_to_b3"][b]]
+    taus = [e["tau"] for e in (fr.evaluate(b, u, T, r, S["D"], start_day=st) for r in _ROUTES[b]) if e["ok"]]
+    return min(taus) if taus else None
+
+
 def replay(S, opt):
     saved = dict(fe.OPT)
     fe.OPT.update(opt)
     try:
         res, _ = fe.simulate(build_plans(S), S["D"])
+        iso = {b: iso_min_days(S, b) for b in res}
     finally:
         fe.OPT.clear()
         fe.OPT.update(saved)
@@ -87,7 +104,7 @@ def replay(S, opt):
         tab = S["end3"][b3] - S["start3"][b3] + 1
         last_wh_day = max(lg.depart[0] for lg in r.logs[:-1]) if len(r.logs) > 1 else r.start_day
         rows.append(dict(batch2=b, batch3=b3, tab_days=tab, tau_sim=r.tau, end_sim=r.end_day, end_tab=S["end3"][b3],
-                         tau_to_last_wh=last_wh_day - r.start_day + 1, flags=";".join(r.flags)))
+                         tau_to_last_wh=last_wh_day - r.start_day + 1, iso_min=iso[b], flags=";".join(r.flags)))
     return pd.DataFrame(rows)
 
 
@@ -102,6 +119,7 @@ def main():
         summ.append(dict(读法=tag, 表列少于回放=int((df.tab_days < df.tau_sim).sum()), 表列多于回放=int((df.tab_days > df.tau_sim).sum()),
                          完全相等=int((df.tab_days == df.tau_sim).sum()), 回放总天数=int(df.tau_sim.sum()), 表列总天数=int(df.tab_days.sum()),
                          绝对差之和=int((df.tab_days - df.tau_sim).abs().sum()),
+                         表列少于孤立最少天数=int((df.tab_days < df.iso_min).sum()), 孤立最少天数之和=int(df.iso_min.sum()),
                          表列少于回放_回程不计=int((df.tab_days < df.tau_to_last_wh).sum()), 超载批次=int((df["flags"] != "").sum())))
         detail.append(df.assign(读法=tag))
     sdf = pd.DataFrame(summ)

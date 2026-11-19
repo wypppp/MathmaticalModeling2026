@@ -21,6 +21,7 @@ RATE = 2.5
 DAY_H = 8.0
 DAY_KM = 500.0
 UNIT_CAP = 3
+VEH_CAP = 20.0  # 每仓每天作业台次上限；默认 8 小时 × 2.5 = 20 已隐含，load_anytime 下须显式限制
 EPS = 1e-9
 
 # 读法开关（A 层检查 A2 用）。默认值 = spec v2.2，主结果只在默认值下产生。
@@ -28,7 +29,7 @@ OPT = dict(
     split_legs=False,    # True：任何路段都可随时出发，行驶到 16:00 停、次日 8:00 续行（S6/G6 的备选）
     split_long=False,    # True：只对 > 500 km 的路段允许随时出发、途中过夜（即 §6 G6 的敏感性）
     no_ceil=False,       # True：作业车数 c = s⁺ + s⁻ 不取整（G7/G15 的备选）
-    load_anytime=False,  # True：装卸不受 8:00–16:00 限制，连续作业（录3.9“不考虑仓库的工作时段”的备选读法）
+    load_anytime=False,  # True：装卸不受 8:00–16:00 限制，可连续作业到夜间（录3.9“不考虑仓库的工作时段”的备选读法）；仓库日容量照计
     no_wh_cap=False,     # True：仓库不排队、无日容量（S8/S9 关闭，诊断用）
 )
 
@@ -126,17 +127,9 @@ class Warehouse:
         rem, start = float(c), None
         if c == 0:
             return t, t
-        if OPT["load_anytime"]:  # 连续作业；h 以当天 8:00 起算，24 小时进一日；不计日容量
-            start = (d, h)
-            h += rem / RATE
-            while h >= 24 - EPS:
-                d, h = d + 1, h - 24
-            end = (d, h) if h <= DAY_H + EPS else (d + 1, 0.0)
-            if queued:
-                self.free_at = end
-            return start, end
+        day_len = 24.0 if OPT["load_anytime"] else DAY_H  # load_anytime：一“天”按 8:00 至次日 8:00 连续作业，日容量（3 支、20 台）照计
         while rem > EPS:
-            if h >= DAY_H - EPS:
+            if h >= day_len - EPS:
                 d, h = d + 1, 0.0
             if queued:
                 us = self.units.setdefault(d, set())
@@ -144,17 +137,21 @@ class Warehouse:
                     d, h = d + 1, 0.0
                     continue
                 us.add(unit)
+            room = (VEH_CAP - self.veh.get(d, 0.0)) if queued else float("inf")
+            if room <= EPS:
+                d, h = d + 1, 0.0
+                continue
             if start is None:
                 start = (d, h)
-            do = min(rem, (DAY_H - h) * RATE)
+            do = min(rem, (day_len - h) * RATE, room)
             h += do / RATE
             rem -= do
             if queued:
                 self.veh[d] = self.veh.get(d, 0.0) + do
                 self.log.append((bid, unit, d, do))
-        end = (d, h)
+        end = (d, h) if h <= DAY_H + EPS else (d + 1, 0.0)  # 16:00 以后才做完：次日 8:00 才能动身
         if queued:
-            self.free_at = end
+            self.free_at = (d, h)
         return start, end
 
 
