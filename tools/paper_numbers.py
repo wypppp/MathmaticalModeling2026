@@ -88,49 +88,53 @@ put("P4.search.score_min", float(ends.min()), "p4/summary.csv", "R39", STATUS_P3
 put("P4.search.score_max", float(ends.max()), "p4/summary.csv", "R39", STATUS_P34)
 
 ab = pd.read_csv(R / "extra/p3_ablation.csv").set_index("方案")
-for row, tag in [("关闭留置", "noleave"), ("关闭途经（每段只走直达）", "nopass"), ("关闭留置和途经", "none"),
+for row, tag in [("关闭留置", "noleave"), ("关闭途经（每段只走直达）", "nopass"), ("关闭留置和途经", "none"), ("不允许提前出发", "noearly"),
                  ("合成方式：先比最差项", "minimax"), ("合成方式：权重 0.4/0.4/0.2", "w442")]:
     for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离")]:
-        put(f"X.ablation.{tag}.{k}", ab.at[row, col], "extra/p3_ablation.csv", "R26", STATUS_X)
+        put(f"X.ablation.{tag}.{k}", ab.at[row, col], "extra/p3_ablation.csv", "R44", STATUS_X)
 via = pd.read_csv(R / "extra/p3_via.csv").iloc[0]
 for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("D", "调运总里程")]:
-    put(f"X.via.{k}", via[col], "extra/p3_via.csv", "R42", STATUS_X, "X1 反面：允许经本批次站点中转（v2.5 其余规则）")
-put("X.ablation.noearly.feasible", bool(ab.at["不允许提前出发", "可行"]), "extra/p3_ablation.csv", "R26/R25", "A", "GPT 第二批复算给出证明")
+    put(f"X.via.{k}", via[col], "extra/p3_via.csv", "R44", STATUS_X, "X1 反面：允许经本批次站点中转（v2.6 其余规则）")
+put("X.ablation.noearly.feasible", bool(ab.at["不允许提前出发", "可行"]), "extra/p3_ablation.csv", "R44", STATUS_X, "指派 2 下可行；指派 0 下不可行由 GPT 第二批证明（R25）")
+put("X.ablation.noleave.lb_tau", ab.at["关闭留置", "孤立下界_天"], "extra/p3_ablation.csv", "R44", STATUS_X)
+put("X.ablation.noleave.lb_L", ab.at["关闭留置", "孤立下界_km"], "extra/p3_ablation.csv", "R44", STATUS_X)
+put("X.ablation.noleave.D", ab.at["关闭留置", "调运总里程"], "extra/p3_ablation.csv", "R44", STATUS_X)
 
 rl = pd.read_csv(R / "extra/p3_rules.csv").set_index("读法")
 for row, tag in [("spec 默认", "spec"), ("split_long（G6 备选）", "split_long"), ("split_legs（D11 的 b）", "split_legs"),
                  ("load_anytime", "load_anytime"), ("split_long+load_anytime", "long_anytime"), ("split_legs+load_anytime", "legs_anytime")]:
     for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离")]:
-        put(f"X.rules.{tag}.{k}", rl.at[row, col], "extra/p3_rules.csv", "R26", STATUS_X)
+        put(f"X.rules.{tag}.{k}", rl.at[row, col], "extra/p3_rules.csv", "R44", STATUS_X)
+    put(f"X.rules.{tag}.lb_tau", rl.at[row, "孤立下界_天"], "extra/p3_rules.csv", "R44", STATUS_X)
 
 pb = pd.read_csv(R / "extra/p4_batches.csv")
 pb = pb[pb["方案"] == "联合搜索"].set_index("批次")
 for nb in (33, 34):
     for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("E", "失衡度"), ("pairs", "批次仓库对"), ("A", "代领代交等效车数")]:
-        put(f"X.p4b.{nb}.{k}", pb.at[nb, col], "extra/p4_batches.csv", "R26", STATUS_X)
+        put(f"X.p4b.{nb}.{k}", pb.at[nb, col], "extra/p4_batches.csv", "R44", STATUS_X)
 
 sn = pd.read_csv(R / "extra/sens.csv").set_index("方案")
 for row, tag in [("G1 保障车分界 T≥26（问题2/3 指派）", "G1.p2"), ("G1 保障车分界 T≥26（问题4 指派）", "G1.p4")]:
-    put(f"X.sens.{tag}.N", sn.at[row, "总车数"], "extra/sens.csv", "R27", STATUS_X)
-    put(f"X.sens.{tag}.P", sn.at[row, "总人数"], "extra/sens.csv", "R27", STATUS_X)
+    put(f"X.sens.{tag}.N", sn.at[row, "总车数"], "extra/sens.csv", "R44", STATUS_X)
+    put(f"X.sens.{tag}.P", sn.at[row, "总人数"], "extra/sens.csv", "R44", STATUS_X)
 for row, tag in [("G2 里程上限 2200 km", "G2_2200"), ("G2 里程上限 2500 km", "G2_2500"), ("G7 装卸不取整", "G7"), ("G8 下的问题 3", "G8.p3"), ("G14 留置不受等待限制", "G14")]:
     for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离")]:
-        put(f"X.sens.{tag}.{k}", sn.at[row, col], "extra/sens.csv", "R27", STATUS_X)
+        put(f"X.sens.{tag}.{k}", sn.at[row, col], "extra/sens.csv", "R44", STATUS_X)
 g8 = "G8 问题2 要求双方时段相容（V⁰ 优先）"
 for k, col in [("B", "批次"), ("A", "代领代交等效车数"), ("N", "总车数"), ("P", "总人数")]:
-    put(f"X.sens.G8.p2.{k}", sn.at[g8, col], "extra/sens.csv", "R27", STATUS_X)
-put("X.sens.G16.feasible", bool(sn.at["G16 每个外部仓库只到访一次", "可行"]), "extra/sens.csv", "R27", STATUS_X, str(sn.at["G16 每个外部仓库只到访一次", "说明"]))
+    put(f"X.sens.G8.p2.{k}", sn.at[g8, col], "extra/sens.csv", "R44", STATUS_X)
+put("X.sens.G16.feasible", bool(sn.at["G16 每个外部仓库只到访一次", "可行"]), "extra/sens.csv", "R44", STATUS_X, str(sn.at["G16 每个外部仓库只到访一次", "说明"]))
 
 r3 = pd.read_csv(R / "extra/r3_study.csv").set_index("项目")
 for row, k in [("问题4方案：代领③的块数", "p4.n"), ("问题4方案：自取货量（按货主车型的等效车数）", "p4.s"), ("问题4方案：自取往返里程（每个货主-仓库对计一次往返，km）", "p4.km"),
                ("禁用③：问题 2 最少批次", "noR3.p2.B"), ("禁用③：问题 3（天/载货距离/偏离/里程）", "noR3.p3"),
                ("禁用③：问题 4（批次/天/载货距离/偏离/失衡度/仓库对/代领代交/里程）", "noR3.p4")]:
-    put(f"X.r3.{k}", r3.at[row, "值"], "extra/r3_study.csv", "R26", "A" if k == "noR3.p2.B" else STATUS_X)
+    put(f"X.r3.{k}", r3.at[row, "值"], "extra/r3_study.csv", "R44", "A" if k == "noR3.p2.B" else STATUS_X)
 
 pr = pd.read_csv(R / "extra/p4_rules.csv")
 for i, tag in [(0, "p3"), (1, "p4")]:
-    for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("E", "失衡度"), ("pairs", "批次仓库对")]:
-        put(f"X.p4rules.{tag}.{k}", pr.iloc[i][col], "extra/p4_rules.csv", "R26", STATUS_X)
+    for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("E", "失衡度"), ("pairs", "批次仓库对"), ("A", "代领代交等效车数")]:
+        put(f"X.p4rules.{tag}.{k}", pr.iloc[i][col], "extra/p4_rules.csv", "R44", STATUS_X)
 
 sys.path.insert(0, str(ROOT / "src"))
 import f_blocks as fb  # noqa: E402
