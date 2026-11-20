@@ -209,6 +209,7 @@ def main():
         recv = send = 0.0
         start_day = None
         first_ext = None  # S12：第一个有作业的外部仓库的站序
+        back_at = None  # S12 后半：第一次把外面装来的货卸进自己队属仓库的站序
         dj_load = defaultdict(list)  # R5：(属主, 节点) -> 代交货装车的站序
         act_nodes = {x} | own | {s_["node"] for s_ in bt["stops"] if s_["segs"]}
         for i, st in enumerate(bt["stops"]):
@@ -217,6 +218,8 @@ def main():
                 V("S15", b, f"第 {i} 站经过与本批无关的节点 {n}")
             if first_ext is None and n.startswith("W") and n not in own and st["segs"]:
                 first_ext = i
+            if back_at is not None and n.startswith("W") and n not in own and st["segs"]:
+                V("S12", b, f"第 {back_at} 站已把接领的货卸进队属仓库，第 {i} 站又在外部仓库 {n} 作业")
             d = D[(pos, n)] if pos != n else 0.0
             if i == 0:
                 # 出发时刻 = 出发日 8:00；由首站到达时刻反推出发日
@@ -267,6 +270,8 @@ def main():
                             continue
                         onboard.remove(hit)
                         done.append(hit)
+                        if back_at is None and n in own and hit[5] not in own:
+                            back_at = i
                         if hit[6] == 0 and hit[5] in own and n not in own and first_ext is not None and hit[8] > first_ext:
                             V("S12", b, f"自有送交货 {it} 在第 {hit[8]} 站（{hit[5]}）才装车，第 {first_ext} 站已在外部仓库作业")
                         if hit[6] == 1 and n in TEAM and n not in own and dj_load.get((owner, n)) and hit[8] < min(dj_load[(owner, n)]):

@@ -1,7 +1,7 @@
 # A5（Gemini 局外审计）裁决单
 
 > 整理：Claude Code（主工程方、spec 作者，**当事方**）。2026-11-20。来源：`review/gemini_A5/gemini_A5_{1,2,3}.md`（Gemini 读 spec v2.2）。
-> 核实脚本：`tools/a5_verify.py`（只读结果台账）；量化：`python src/f_run_extra.py s12` → `results/F/extra/p3_s12.csv`。
+> 核实脚本：`tools/a5_verify.py`（只读结果台账）；量化：`python src/f_run_extra.py s12` → `results/F/extra/p3_s12.csv`（在提交 928738d 的代码下运行；之后路线枚举已执行 S12，该实验的“现行”一行在当前代码下复现不出）。
 > 人只需回复“全部默认，除了 Ux”。**U1、U2 会改动问题 3、4 的主结果。**
 
 ## 1. 待人裁决

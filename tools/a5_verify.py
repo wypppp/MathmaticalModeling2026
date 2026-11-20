@@ -39,6 +39,13 @@ def check(tag, steps_path, assign_path, batches_path):
                 a, z = g.split(">")
                 if a in own and z not in own and first_ext is not None and i > first_ext:
                     out["S12"].append((b, u, g, f"第 {i} 站才装，首个外部作业在第 {first_ext} 站"))
+        # S12 后半：接领的货卸进自己的队属仓库之后，不再到外部仓库作业
+        first_back = next((i for i, r in s.iterrows() if r.node in own and any(g.split(">")[0] not in own for g in groups(r.unload))), None)
+        if first_back is not None:
+            for i, r in s.iterrows():
+                if i > first_back and r.node.startswith("W") and r.node not in own and (groups(r.load) or groups(r.unload)):
+                    out["S12"].append((b, u, r.node, f"第 {first_back} 站已卸接领货，第 {i} 站又在外部作业"))
+                    break
         # S11：多站留置须按相反顺序汇合
         stack = []
         for i, r in s.iterrows():

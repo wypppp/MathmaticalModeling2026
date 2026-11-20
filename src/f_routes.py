@@ -127,7 +127,7 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
             out.append(fe.Step(cur))
         return out
 
-    def dfs(pos, pending, onboard, left, visits, dist, movT, steps, ext=False):
+    def dfs(pos, pending, onboard, left, visits, dist, movT, steps, ext=False, back=False):
         if dist > max_km + 1e-9:
             return
         if ext and pending & own_send:
@@ -165,6 +165,10 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
                     continue
                 if ext and set(S) & own_send:
                     continue
+                is_ext = n.startswith("W") and n not in own_set
+                if back and is_ext:
+                    continue  # S12 后半：接领的货卸进自己的队属仓库之后，不再到外部仓库作业
+                back2 = back or (n in own_set and any(groups[g].load not in own_set for g in un))
                 if any(groups[g].after and any(groups[x].load == groups[g].after for x in pending if x not in S) for g in S):
                     continue  # R5：代交货尚未在 h_k 装车
                 ext2 = ext or (n.startswith("W") and n not in own_set)
@@ -183,7 +187,7 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
                     if L:
                         lf2[n] = Lset
                     for d, pre in legs:
-                        dfs(n, pend2, (ob | Sset) - Lset, lf2, v2, dist + d, mT - c, steps + pre + [fe.Step(leave=sorted(L), **base)], ext2)
+                        dfs(n, pend2, (ob | Sset) - Lset, lf2, v2, dist + d, mT - c, steps + pre + [fe.Step(leave=sorted(L), **base)], ext2, back2)
 
     dfs(unit, frozenset(gids), set(), {}, {}, 0.0, T, [])
     return res
