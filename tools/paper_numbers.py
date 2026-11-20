@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 rows = []
 
 # 复核状态：A = 已由 GPT 对当前版本复核；B = GPT 复核过上一版、当前版只用其脚本或检查器验证；C = 单方结果
-STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "B", "A", "B", "C"
+STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "A", "C"  # R29：问题 1、3、4 当前版本已由 GPT 第三批复核
 
 
 def put(key, val, src, ev, st, note=""):
@@ -37,6 +37,8 @@ ym = pd.read_csv(R / "p1/y1_model.csv").set_index("方案")
 put("P1.model.batches", ym.at["模型最优", "批次"], "p1/y1_model.csv", "R9", "C")
 put("P1.model.batches_noR4", ym.at["禁用R4", "批次"], "p1/y1_model.csv", "R9", "C")
 dur = pd.read_csv(R / "checks/A2_duration.csv")
+put("P1.before.tau_submitted", 122, "review/gpt_v23b/README.md（附件 2 提报时段合计）", "R29", "A")
+put("P1.before.n_sub_lt_replay", 15, "review/gpt_v23b/README.md", "R29", "A", "附件 2 提报时长短于按表执行所需天数的批数")
 put("P1.n_days_eq_submitted", int(dur.same_len.sum()), "checks/A2_duration.csv", "R16/R21", "A", f"共 {len(dur)} 批")
 
 p2 = pd.read_csv(R / "p2/summary.csv").set_index("variant")
@@ -101,7 +103,7 @@ r3 = pd.read_csv(R / "extra/r3_study.csv").set_index("项目")
 for row, k in [("问题4方案：代领③的块数", "p4.n"), ("问题4方案：自取货量（按货主车型的等效车数）", "p4.s"), ("问题4方案：自取往返里程（每个货主-仓库对计一次往返，km）", "p4.km"),
                ("禁用③：问题 2 最少批次", "noR3.p2.B"), ("禁用③：问题 3（天/载货距离/偏离/里程）", "noR3.p3"),
                ("禁用③：问题 4（批次/天/载货距离/偏离/失衡度/仓库对/代领代交/里程）", "noR3.p4")]:
-    put(f"X.r3.{k}", r3.at[row, "值"], "extra/r3_study.csv", "R26", STATUS_X)
+    put(f"X.r3.{k}", r3.at[row, "值"], "extra/r3_study.csv", "R26", "A" if k == "noR3.p2.B" else STATUS_X)
 
 pr = pd.read_csv(R / "extra/p4_rules.csv")
 for i, tag in [(0, "p3"), (1, "p4")]:
