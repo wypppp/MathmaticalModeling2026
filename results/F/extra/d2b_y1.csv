@@ -1,0 +1,17 @@
+﻿block,executor,owner,w,dir,h,case,how,shared,nearby
+2,U4,U8,WF,领,WO,R2,代领,False,False
+7,U11,U8,WF,领,WO,R1,代领,True,True
+19,U12,U5,WO,领,WS,R6,反转代交,False,False
+36,U1,U3,WC,领,WQ,R5,代领,False,True
+37,U1,U3,WC,交,WQ,R7,代交,False,True
+38,U1,U3,WD,领,WQ,R5,代领,False,True
+54,U6,U9,WC,领,WP,R1,代领,True,True
+55,U6,U9,WF,领,WP,R1,代领,True,True
+56,U8,U11,WC,领,WO,R1,代领,True,True
+57,U5,U11,WC,领,WS,R1,代领,True,True
+59,U8,U11,WB,领,WO,R1,代领,True,True
+60,U8,U12,WE,领,WO,R1,代领,True,True
+61,U11,U12,WF,领,WO,R1,代领,True,True
+64,U8,U12,WC,领,WO,R1,代领,True,True
+65,U8,U12,WA,领,WO,R1,代领,True,True
+66,U8,U12,WB,领,WO,R1,代领,True,True

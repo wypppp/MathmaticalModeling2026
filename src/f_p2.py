@@ -22,13 +22,20 @@ import f_blocks as fb
 NEAR = 150
 
 
-def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True, allow_R3=True):
-    """块 k 的全部候选转移项（不含 'own'）。"""
+def nearby(x, y, D, near=NEAR):
+    """录 2.5“就近”：x、y 共用队属仓库，或任一方驻地与另一方可用队属仓库距离 ≤ near（D2 读法 b 的敏感性用）。"""
+    return bool(set(fb.H[x]) & set(fb.H[y])) or any(D.at[x, h] <= near for h in fb.H[y]) or any(D.at[y, h] <= near for h in fb.H[x])
+
+
+def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True, allow_R3=True, near_all=False):
+    """块 k 的全部候选转移项（不含 'own'）。near_all=True：D2 读法 b，每笔转移另须满足“就近”（主结果不用）。"""
     y = k.owner
     out = []
     for bt in batches.values():
         x = bt.unit
         if x == y or (y == "U9" and x != "U6"):
+            continue
+        if near_all and not nearby(x, y, D, near):
             continue
         W = fb.targets(bt)
         Hx = set(fb.H[x])
@@ -71,13 +78,13 @@ def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=N
 
 
 def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True,
-          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max", allow_R3=True):
+          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max", allow_R3=True, near_all=False):
     """返回 dict(assign={块id: 选项}, stats=..., status=...)。forbid：若干选项集合，每个集合不得同时全选。
     fix_batches：把批次数固定为给定值（做折衷曲线时用）；此时 levels 中的 'B' 被跳过。"""
     m = gp.Model("p2")
     m.Params.OutputFlag = 1 if verbose else 0
     m.Params.MIPGap = 0.0
-    opts = {k.id: [("own",)] + options(k, batches, blocks, cap, D, allow_R4, only_shared, near, allow_rev, allow_R3) for k in blocks}
+    opts = {k.id: [("own",)] + options(k, batches, blocks, cap, D, allow_R4, only_shared, near, allow_rev, allow_R3, near_all) for k in blocks}
     z = {(kid, o): m.addVar(vtype="B") for kid, os in opts.items() for o in os}
     y = {b: m.addVar(vtype="B") for b in batches}
     own_at = defaultdict(list)  # (批次, 仓库) -> 自有块
