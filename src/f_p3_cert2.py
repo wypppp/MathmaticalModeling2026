@@ -381,9 +381,67 @@ def delta5_search(n_starts=30, seed=0, sweeps=6):
     print("更好方案：", bool((df.score < s_inc - EPS).any()), "；最好", df.score.min())
 
 
+def ties(vec_ids):
+    """并列核查（W4 第三级）：在给定出发日向量上，找合成分等于主结果的全部方案中的最短总里程（V 只由出发日决定）。"""
+    t0 = time.time()
+    inst, inc, D = build()
+    ev_inc = inst.evaluate(inc)
+    s_inc, V_inc = inst.score(ev_inc, REF)
+    reps, _ = collapse(inst)
+    vecs, _, mt = day_vectors(inst)
+    mLall = {b: min(x["Lbar"] for x in inst.cands[b]) for b in inst.ids}
+    rows = []
+    for vi in vec_ids:
+        v = vecs[vi]
+        dlt = sum(abs(v[b] - inst.batches[b].a) for b in inst.ids)
+        E = int(math.floor((s_inc - dlt * WD) / WT + 1e-9))
+        budget = s_inc - dlt * WD
+        V = sum(1 for (b0, be) in inst.pairs if not (max(1, inst.batches[b0].a - 6) <= v[be] <= inst.batches[b0].e))
+        cls, cand, iv, ok = clusters(inst, v, E, mt, reps)
+        tot = {(0, 0.0): 0.0}  # (超额 τ, 超额 L̄) -> 最短里程
+        for c in cls:
+            mL = {b: mLall[b] for b in c}
+            opts = {b: sorted(((inst.cands[b][i]["tau"] - mt[b], inst.cands[b][i]["Lbar"] - mL[b], i) for i in cand[b])) for b in c}
+            front, sol = {}, {}
+
+            def dfs(k, te, le):
+                if k == len(c):
+                    ev = f_p3._Sub(inst, sol).evaluate(sol)
+                    if not ev["feasible"] or any(ev["res"][b].end_day > iv[b][1] for b in c):
+                        return
+                    key = (ev["tau"] - sum(mt[b] for b in c), round(ev["L"] - sum(mL[b] for b in c), 6))
+                    if key[0] <= E and (key not in front or ev["D"] < front[key]):
+                        front[key] = ev["D"]
+                    return
+                b = c[k]
+                for dt, dl, i in opts[b]:
+                    if te + dt > E or (te + dt) * WT + (le + dl) * WL > budget + EPS:
+                        continue
+                    sol[b] = (i, v[b])
+                    dfs(k + 1, te + dt, le + dl)
+                sol.pop(b, None)
+
+            dfs(0, 0, 0.0)
+            new = {}
+            for (t1, l1), d1 in tot.items():
+                for (t2, l2), d2 in front.items():
+                    kk = (t1 + t2, round(l1 + l2, 6))
+                    if kk[0] <= E and kk[0] * WT + kk[1] * WL <= budget + 1e-6 and (kk not in new or d1 + d2 < new[kk]):
+                        new[kk] = d1 + d2
+            tot = new
+        best = [(t * WT + l * WL + dlt * WD, d, t, l) for (t, l), d in tot.items()]
+        eq = [x for x in best if abs(x[0] - s_inc) <= 1e-9]
+        lower = [x for x in best if x[0] < s_inc - 1e-9]
+        rows.append(dict(vec=vi, delta=dlt, V=V, n_scores=len(best), n_lower=len(lower), n_equal=len(eq),
+                         minD_equal=min((x[1] for x in eq), default=None), inc_D=ev_inc["D"], inc_V=V_inc))
+        print(rows[-1], f"{time.time() - t0:.0f}s")
+    pd.DataFrame(rows).to_csv(OUT / f"ties_{'_'.join(map(str, vec_ids))}.csv", index=False, encoding="utf-8-sig")
+
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "measure":
         measure()
+    elif sys.argv[1] == "ties":
+        ties([int(x) for x in sys.argv[2:]])
     elif sys.argv[1] == "d5":
         delta5_search(*(int(x) for x in sys.argv[2:4]))
     else:
