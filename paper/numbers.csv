@@ -71,6 +71,13 @@ P3.pruned.L,12604.056135,p3/summary.csv,R33,B,
 P3.pruned.delta,5,p3/summary.csv,R33,B,
 P3.pruned.D,29719.0,p3/summary.csv,R33,B,
 P3.pruned.V,11.0,p3/summary.csv,R33,B,
+X.d2b.B,34,extra/d2b.csv,R32,C,D2 读法 b：每笔代办另须“就近”
+X.d2b.N,477,extra/d2b.csv,R32,C,D2 读法 b：每笔代办另须“就近”
+X.d2b.P,1224,extra/d2b.csv,R32,C,D2 读法 b：每笔代办另须“就近”
+X.d2b.A,9.396967,extra/d2b.csv,R32,C,D2 读法 b：每笔代办另须“就近”
+X.d2b.pairs,55,extra/d2b.csv,R32,C,D2 读法 b：每笔代办另须“就近”
+X.d2b.E,0.934557,extra/d2b.csv,R32,C,D2 读法 b：每笔代办另须“就近”
+X.d2b.y1_not_near,2,extra/d2b_y1.csv,R32,C,附件 3 跨单位转移中不满足“就近”的笔数
 P4.p3.B,32,p4/summary.csv,R34,B,
 P4.p3.N,474,p4/summary.csv,R34,B,
 P4.p3.P,1212,p4/summary.csv,R34,B,

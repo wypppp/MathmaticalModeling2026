@@ -57,6 +57,11 @@ for row, tag in [("下界（各批孤立最优）", "lb"), ("基线", "base"), (
         put(f"P3.{tag}.D", p3.at[row, "D"], "p3/summary.csv", "R33", STATUS_P34)
         put(f"P3.{tag}.V", p3.at[row, "V"], "p3/summary.csv", "R33", STATUS_P34)
 
+d2 = pd.read_csv(R / "extra/d2b.csv").set_index("variant")
+for k in ("B", "N", "P", "A", "pairs", "E"):
+    put(f"X.d2b.{k}", d2.at["near_all", k], "extra/d2b.csv", "R32", STATUS_X, "D2 读法 b：每笔代办另须“就近”")
+y1n = pd.read_csv(R / "extra/d2b_y1.csv")
+put("X.d2b.y1_not_near", int((~y1n.nearby).sum()), "extra/d2b_y1.csv", "R32", STATUS_X, "附件 3 跨单位转移中不满足“就近”的笔数")
 p4 = pd.read_csv(R / "p4/summary.csv")
 for i, tag in [(0, "p3"), (1, "main")]:
     r = p4.iloc[i]
