@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 rows = []
 
 # 复核状态：A = 已由 GPT 对当前版本复核；B = GPT 复核过上一版、当前版只用其脚本或检查器验证；C = 单方结果
-STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "A", "C"  # 问题 1 R29、问题 2 已复核；问题 3、4 为 spec v2.5 版（R38/R39），GPT 第五批（R41）复核一致
+STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "B", "B", "C"  # spec v2.6（Y1 选 B 版）：问题 2–4 为新版，仅经本方检查器与 GPT 第五批脚本复跑，待 GPT 第六批
 
 
 def put(key, val, src, ev, st, note=""):
@@ -57,6 +57,20 @@ for row, tag in [("下界（各批孤立最优）", "lb"), ("基线", "base"), (
         put(f"P3.{tag}.D", p3.at[row, "D"], "p3/summary.csv", "R38", STATUS_P34)
         put(f"P3.{tag}.V", p3.at[row, "V"], "p3/summary.csv", "R38", STATUS_P34)
 
+# spec v2.6 Y1/Y2：问题 2 的并列最优指派与各自的问题 3 结果
+t2 = pd.read_csv(R / "p2/ties.csv")
+put("P2.ties.n", len(t2), "p2/ties.csv", "R43", STATUS_P2, "四级目标同值的并列最优指派个数（V38）")
+for r in t2.itertuples():
+    for k in ("N", "P", "E", "pairs"):
+        put(f"P2.tie{r.tie}.{k}", getattr(r, k), "p2/ties.csv", "R43", STATUS_P2)
+t3 = pd.read_csv(R / "p3/ties.csv")
+for r in t3.itertuples():
+    for k in ("tau", "L", "delta", "V", "D", "score", "lb_tau", "lb_L", "base_tau", "base_L", "base_delta"):
+        put(f"P3.tie{r.tie}.{k}", getattr(r, k), "p3/ties.csv", "R43", STATUS_P34)
+put("P3.choice", int(t3[t3.chosen].tie.iloc[0]), "p3/ties.csv", "R43", STATUS_P34, "第 5 级选中的并列指派编号")
+rf = pd.read_csv(R / "p3/ref.csv").iloc[0]
+for k in ("l_tau", "l_L", "u_tau", "u_L", "u_delta"):
+    put(f"P3.ref.{k}", rf[k], "p3/ref.csv", "R43", STATUS_P34, "J1 共用标尺（Y2）")
 d2 = pd.read_csv(R / "extra/d2b.csv").set_index("variant")
 for k in ("B", "N", "P", "A", "pairs", "E"):
     put(f"X.d2b.{k}", d2.at["near_all", k], "extra/d2b.csv", "R32", STATUS_X, "D2 读法 b：每笔代办另须“就近”")

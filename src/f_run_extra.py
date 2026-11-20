@@ -31,6 +31,11 @@ batches, blocks = fb.build(4)
 a3 = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
 
 
+def main_ref():
+    r = pd.read_csv(ROOT / "results" / "F" / "p3" / "ref.csv").iloc[0]
+    return dict(l=(r.l_tau, r.l_L, r.l_delta), u=(r.u_tau, r.u_L, r.u_delta))
+
+
 def run3(assign, **kw):
     inst = f_p3.Instance(assign, batches, blocks, cap, D, **kw)
     if not inst.routable:
@@ -61,7 +66,7 @@ def q4_finalize(a, inst_p, sol_p, ref):
 
 def p3_ablation():
     inst, base, evb = run3(a3)
-    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+    ref = main_ref()  # spec v2.6 Y2：问题 3 主流程写出的共用标尺
     rows = []
 
     def solve(tag, **kw):
@@ -118,7 +123,7 @@ def r3_study():
     aN = r["assign"]
     # 禁用③的问题 3、问题 4（同一套标尺）
     inst0, base0, evb0 = run3(a3)
-    ref = dict(l=(inst0.lb_tau, inst0.lb_L, 0.0), u=(evb0["tau"], evb0["L"], evb0["delta"]))
+    ref = main_ref()  # spec v2.6 Y2：问题 3 主流程写出的共用标尺
     instNF = f_p3.Instance(aN, batches, blocks, cap, D)
     _, evN = q3_search(instNF, ref)
     instN = f_p3.Instance(aN, batches, blocks, cap, D, prune=True)  # 问题 4 改派搜索的起点（剪枝实例上的路线编号）
@@ -146,7 +151,7 @@ def r3_study():
 def p4_batches():
     """问题 4 的批次数折衷：32（主）、33、34 批；每个批次数从“该批次数下代领代交最少”的指派出发搜索。"""
     inst0, base0, evb0 = run3(a3)
-    ref = dict(l=(inst0.lb_tau, inst0.lb_L, 0.0), u=(evb0["tau"], evb0["L"], evb0["delta"]))
+    ref = main_ref()  # spec v2.6 Y2：问题 3 主流程写出的共用标尺
     _, tot3, _ = f_p2.summarize(a3, batches, blocks, cap)
     rows = []
     for nb in (33, 34):
@@ -181,7 +186,7 @@ def p3_via():
     """X1 的反面（表 10-1 第 12 行）：允许经本批次站点（驻地、可用队属仓库、本批次仓库）中转，其余按 v2.5（字面留置、现行 J1 标尺）。"""
     import f_routes as fr
     inst, base, evb = run3(a3)
-    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))  # 主流程的标尺
+    ref = main_ref()  # spec v2.6 Y2：问题 3 主流程写出的共用标尺
     old = fr.ALLOW_VIA
     fr.ALLOW_VIA = True
     try:
@@ -389,7 +394,7 @@ def p3_nobase():
     """人在 review/human_trace_初稿.md 中质疑途中经过驻地：问题 3 在“禁止途中经过驻地（仍可途经仓库）”与“禁止一切途经”下的结果。"""
     rows = []
     inst0, base0, evb0 = run3(a3)
-    ref = dict(l=(inst0.lb_tau, inst0.lb_L, 0.0), u=(evb0["tau"], evb0["L"], evb0["delta"]))
+    ref = main_ref()  # spec v2.6 Y2：问题 3 主流程写出的共用标尺
     for tag, flt in (("禁止途中经过驻地", no_base_via), ("禁止一切途经", lambda e: e["n_noop"] == 0)):
         r = run3(a3, cand_filter=flt)
         if r is None:

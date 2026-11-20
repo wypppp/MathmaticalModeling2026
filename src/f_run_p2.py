@@ -46,6 +46,22 @@ def solve_checked(batches, blocks, cap, D, **kw):
             forbid.append(S)
 
 
+def assign_sig(a):
+    """指派的稳定签名（问题 2 与问题 3 之间传递第 5 级的选择）。"""
+    import hashlib
+    return hashlib.md5(repr(sorted(a.items())).encode()).hexdigest()
+
+
+def check_routes(assign, batches, blocks, cap, D):
+    groups = fr.batch_groups(assign, batches, blocks, cap)
+    out = {}
+    for b, gs in groups.items():
+        T = fr.batch_T(gs, batches[b].unit)[0]
+        nd, n_all = fr.candidates(b, batches[b].unit, T, gs, D)
+        out[b] = dict(T=T, cands=nd, n_all=n_all)
+    return out
+
+
 def ledger(tag, r, routes, batches, blocks, cap):
     rows, tot, flow = f_p2.summarize(r["assign"], batches, blocks, cap)
     for x in rows:
@@ -75,7 +91,7 @@ def main():
     variants = [("main", {}), ("noR4", dict(allow_R4=False)), ("shared_only", dict(only_shared=True)),
                 ("c6_literal", dict(levels=("B", "A", "V0"), c6="maximal")), ("near149", dict(near=149)),
                 ("norev", dict(allow_rev=False))]
-    keep = {}
+    keep, forbids = {}, {}
     for tag, kw in variants:
         t0 = time.time()
         r, routes, forbid = solve_checked(batches, blocks, cap, D, **kw)
@@ -86,7 +102,36 @@ def main():
                          max_minD=max(x["min_D"] for x in rows), sum_min_tau=sum(x["min_tau"] for x in rows),
                          sum_min_Lbar=sum(x["min_Lbar"] for x in rows), n_cuts=len(forbid), iters=r["iters"], seconds=time.time() - t0))
         keep[tag] = (r, routes, rows, tot, flow)
+        forbids[tag] = forbid
         print(tag, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in summ[-1].items()})
+    # 并列最优（spec v2.6 Y1）：四级同值的全部指派；第 5 级（问题 3 合成目标最小）由 f_run_p3.py 选出，写入 p3/choice.csv
+    rt = f_p2.solve(batches, blocks, cap, D, forbid=forbids["main"], alternatives=50)
+    assert rt["assign"] == keep["main"][0]["assign"], "带 forbid 重解的主解与主流程不同"
+    ties = [rt["assign"]] + rt["alts"]
+    sigs = [assign_sig(a) for a in ties]
+    choice = ROOT / "results" / "F" / "p3" / "choice.csv"
+    pick = 0
+    if choice.exists():
+        want = pd.read_csv(choice).iloc[0]["sig"]
+        assert want in sigs, "p3/choice.csv 的指派不在当前并列集合中，需先重跑 f_run_p3.py"
+        pick = sigs.index(want)
+    trow = []
+    for k, a in enumerate(ties):
+        rk = dict(keep["main"][0], assign=a)  # 保留求解统计，只换指派
+        routes_k = check_routes(a, batches, blocks, cap, D)
+        assert all(v["cands"] for v in routes_k.values()), f"并列指派 {k} 有批次无合规路线"
+        rows_k, tot_k, flow_k = ledger(f"tie{k}", rk, routes_k, batches, blocks, cap)
+        trow.append(dict(tie=k, sig=sigs[k], chosen=(k == pick), N=tot_k["N"], P=tot_k["P"], T=tot_k["T"], A=tot_k["A"], pairs=tot_k["pairs"], E=tot_k["E"],
+                         diff_blocks=" ".join(str(b) for b in sorted(a) if a[b] != ties[0][b])))
+        if k == pick and k != 0:  # 主解改为第 5 级选中的并列指派
+            rows, tot, flow = ledger("main", rk, routes_k, batches, blocks, cap)
+            summ[0].update(N=tot["N"], P=tot["P"], T=tot["T"], A=tot["A"], pairs=tot["pairs"], E=tot["E"],
+                           max_minD=max(x["min_D"] for x in rows), sum_min_tau=sum(x["min_tau"] for x in rows),
+                           sum_min_Lbar=sum(x["min_Lbar"] for x in rows))
+            keep["main"] = (rk, routes_k, rows, tot, flow)
+    pd.DataFrame(trow).to_csv(OUT / "ties.csv", index=False, encoding="utf-8-sig")
+    summ[0]["n_ties"], summ[0]["tie_chosen"] = len(ties), pick
+    print(f"并列最优指派 {len(ties)} 个；主解取第 {pick} 个（{'按 p3/choice.csv' if choice.exists() else '尚无问题 3 的选择，暂取求解器给出的第 0 个'}）")
     # 折衷曲线：固定批次数，最小化代领代交量
     r0 = keep["main"][0]
     Bmin = r0["stats"]["B"]

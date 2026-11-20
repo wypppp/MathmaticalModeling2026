@@ -63,10 +63,11 @@ def dump(tag, inst, sol, ev):
 
 
 MAX_VEC = 12
+MAX_VEC_MAIN = 64  # 主流程的多起点出发日向量上限：替代指派 δ≤1 的向量共 62 个，全部覆盖（补充实验用 MAX_VEC）
 REF25 = dict(l=(124, 12566.233135, 0.0), u=(134, 14412.883927, 5))  # J1 标尺：人裁 J1 时的下界与规则基线（R25），固定不随候选集变
 
 
-def search(inst, ref, log=print, multistart=True, init=None):
+def search(inst, ref, log=print, multistart=True, init=None, max_vec=MAX_VEC, return_ev1_sol=False):
     """基线（或给定起点 init）→ 坐标下降 → 成对邻域；multistart 时再在 δ 最小的各出发日向量上做固定出发日多起点路线搜索，
     最后按 (合成分, V, 总里程) 打磨。"""
     t1 = time.time()
@@ -79,12 +80,13 @@ def search(inst, ref, log=print, multistart=True, init=None):
             break
         sol, best = inst.improve(sol, ref)
     ev1 = inst.evaluate(sol)
+    sol1 = dict(sol)
     if not multistart:
         return base, ev1, sol, ev1
     import f_p3_cert2 as c2
     vecs, complete, _ = c2.day_vectors(inst, dmax=ev1["delta"], limit=200)
-    if len(vecs) > MAX_VEC:  # 补充实验中 δ 较大的变体：只取 δ 最小的 MAX_VEC 个向量（主结果只有 4 个，不受影响）
-        vecs = sorted(vecs, key=lambda v: sum(abs(v[b] - inst.batches[b].a) for b in inst.ids))[:MAX_VEC]
+    if len(vecs) > max_vec:  # 补充实验中 δ 较大的变体：只取 δ 最小的 MAX_VEC 个向量（主结果只有 4 个，不受影响）
+        vecs = sorted(vecs, key=lambda v: sum(abs(v[b] - inst.batches[b].a) for b in inst.ids))[:max_vec]
         complete = False
     pool = [(f_p3.key3(inst, ev1, ref), sol)]
     for vi, v in enumerate(vecs):
@@ -95,27 +97,67 @@ def search(inst, ref, log=print, multistart=True, init=None):
     sol = min(pool, key=lambda x: x[0])[1]
     sol, k = f_p3.polish(inst, sol, ref)
     log(f"  打磨后 {k}  {time.time() - t1:.1f}s")
+    if return_ev1_sol:
+        return sol, sol1
     return base, ev1, sol, inst.evaluate(sol)
+
+
+def _tie_search(path, ref):
+    """子进程：对一个并列指派重建实例并做主流程搜索，返回 (终点解, 坐标下降+成对邻域的解)。"""
+    cap, D = fp.load_cap(), fp.load_dist()
+    batches, blocks = fb.build(4)
+    inst = f_p3.Instance(load_assign(Path(path), blocks), batches, blocks, cap, D)
+    tag = Path(path).stem
+    return search(inst, ref, log=lambda *x: print(f"[{tag}]", *x, flush=True), max_vec=MAX_VEC_MAIN, return_ev1_sol=True)
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     cap, D = fp.load_cap(), fp.load_dist()
     batches, blocks = fb.build(4)
-    assign = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
+    # spec v2.6 Y1/Y2：问题 2 的全部并列最优指派（f_run_p2.py 写出 p2/assign_tie*.csv），共用 J1 标尺，取问题 3 合成目标最小者
+    import glob
+    import f_run_p2
+    tie_files = sorted(glob.glob(str(ROOT / "results" / "F" / "p2" / "assign_tie*.csv")), key=lambda f: int(Path(f).stem[len("assign_tie"):]))
+    assert tie_files, "缺 p2/assign_tie*.csv，先运行 f_run_p2.py"
     t0 = time.time()
-    inst = f_p3.Instance(assign, batches, blocks, cap, D)
-    print(f"实例：{len(inst.ids)} 批，全部候选路线 {sum(len(v) for v in inst.cands.values())} 条（帕累托子集 {sum(len(v) for v in inst.pareto.values())} 条），"
-          f"下界 tau≥{inst.lb_tau} L≥{inst.lb_L:.3f}，建模 {time.time() - t0:.1f}s")
-    base0 = inst.baseline()
-    evb = inst.evaluate(base0)
-    print("基线", evb["feasible"], evb["viol"], dict(tau=evb["tau"], L=round(evb["L"], 3), delta=evb["delta"], V=evb["V"], D=evb["D"]))
-    # J1 的标尺按定义取当前模型的单项下界与规则基线（v2.5 改了路线空间，下界与基线随之变化；R33 时规则未变，故与 R25 相同）
-    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
-    print(f"J1 标尺：下界 {ref['l']}，规则基线 {ref['u']}（R25：{REF25['l']} / {REF25['u']}）")
+    tie = []
+    for f in tie_files:
+        a = load_assign(Path(f), blocks)
+        ins = f_p3.Instance(a, batches, blocks, cap, D)
+        b0 = ins.baseline()
+        eb = ins.evaluate(b0)
+        assert eb["feasible"], f"{f} 的规则基线排不出"
+        tie.append(dict(file=f, assign=a, inst=ins, base=b0, evb=eb))
+        print(f"并列指派 {Path(f).stem}：候选 {sum(len(v) for v in ins.cands.values())} 条，下界 τ≥{ins.lb_tau} L≥{ins.lb_L:.3f}；"
+              f"基线 τ={eb['tau']} L={eb['L']:.3f} δ={eb['delta']}  {time.time() - t0:.1f}s")
+    ref = dict(l=(min(t["inst"].lb_tau for t in tie), min(t["inst"].lb_L for t in tie), 0.0),
+               u=(max(t["evb"]["tau"] for t in tie), max(t["evb"]["L"] for t in tie), max(t["evb"]["delta"] for t in tie)))
+    print(f"J1 共用标尺（Y2）：下界 {ref['l']}，基线 {ref['u']}")
     pd.DataFrame([dict(l_tau=ref["l"][0], l_L=ref["l"][1], l_delta=ref["l"][2], u_tau=ref["u"][0], u_L=ref["u"][1], u_delta=ref["u"][2])]).to_csv(
         OUT / "ref.csv", index=False, encoding="utf-8-sig")
-    base, ev1, sol, ev = search(inst, ref)
+    trow = []
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor(max_workers=len(tie)) as ex:  # 各并列指派的搜索互不依赖，并行
+        sols = list(ex.map(_tie_search, [t["file"] for t in tie], [ref] * len(tie)))
+    for k, t in enumerate(tie):
+        sk, sk1 = sols[k]
+        ek, e1 = t["inst"].evaluate(sk), t["inst"].evaluate(sk1)
+        t.update(sol=sk, ev=ek, ev1=e1, key=f_p3.key3(t["inst"], ek, ref))
+        trow.append(dict(tie=k, sig=f_run_p2.assign_sig(t["assign"]), lb_tau=t["inst"].lb_tau, lb_L=t["inst"].lb_L,
+                         base_tau=t["evb"]["tau"], base_L=t["evb"]["L"], base_delta=t["evb"]["delta"],
+                         tau=ek["tau"], L=ek["L"], delta=ek["delta"], V=ek["V"], D=ek["D"], score=t["key"][0], feasible=ek["feasible"]))
+        print(f"  并列指派 {k}：τ={ek['tau']} L={ek['L']:.3f} δ={ek['delta']} V={ek['V']} D={ek['D']} 合成分={t['key'][0]:.10f}  {time.time() - t0:.1f}s")
+    pick = min(range(len(tie)), key=lambda k: tie[k]["key"])
+    for r in trow:
+        r["chosen"] = r["tie"] == pick
+    pd.DataFrame(trow).to_csv(OUT / "ties.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame([dict(tie=pick, sig=trow[pick]["sig"])]).to_csv(OUT / "choice.csv", index=False, encoding="utf-8-sig")
+    main_sig = f_run_p2.assign_sig(load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks))
+    print(f"第 5 级选中并列指派 {pick}" + ("" if main_sig == trow[pick]["sig"] else "；**p2/assign_main.csv 不是所选指派，请再运行 f_run_p2.py**"))
+    assign, inst, evb, base0 = tie[pick]["assign"], tie[pick]["inst"], tie[pick]["evb"], tie[pick]["base"]
+    print("基线", evb["feasible"], evb["viol"], dict(tau=evb["tau"], L=round(evb["L"], 3), delta=evb["delta"], V=evb["V"], D=evb["D"]))
+    base, ev1, sol, ev = base0, tie[pick]["ev1"], tie[pick]["sol"], tie[pick]["ev"]
     print("主路线", ev["feasible"], ev["viol"], dict(tau=ev["tau"], L=round(ev["L"], 3), delta=ev["delta"], V=ev["V"], D=ev["D"]), f"{time.time() - t0:.1f}s")
     # 消融：R25 的做法（帕累托剪枝候选、不做多起点）
     instp = f_p3.Instance(assign, batches, blocks, cap, D, prune=True)

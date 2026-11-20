@@ -36,7 +36,8 @@ def main():
     inst3 = f_p3.Instance(a3, batches, blocks, cap, D, prune=True)
     base = inst3.baseline()
     evb = inst3.evaluate(base)
-    ref3 = dict(l=(inst3.lb_tau, inst3.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+    r_ = pd.read_csv(ROOT / "results" / "F" / "p3" / "ref.csv").iloc[0]  # spec v2.6 Y2：与问题 3 同一共用标尺
+    ref3 = dict(l=(r_.l_tau, r_.l_L, r_.l_delta), u=(r_.u_tau, r_.u_L, r_.u_delta))
     sol3, _ = inst3.improve(base, ref3)
     ev3 = inst3.evaluate(sol3)
     _, tot3, _ = f_p2.summarize(a3, batches, blocks, cap)
