@@ -121,18 +121,23 @@ def measure():
     pd.DataFrame(rows).to_csv(OUT / "measure.csv", index=False, encoding="utf-8-sig")
 
 
-def cluster_front(inst, cl, days, cand, iv, mt, mL, E, budget, part, nparts):
+def cluster_front(inst, cl, days, cand, iv, mt, mL, E, budget, part, nparts, sub=0, nsub=1, depth2=13):
     """簇内 DFS，第 SPLIT 层（或叶子，若簇更小）的前缀按编号轮流分片。返回 (前沿 {超额τ: 最小超额L̄}, 回放次数)。"""
     WT, WL = c2.WT, c2.WL
     opts = {b: sorted(((inst.cands[b][i]["tau"] - mt[b], inst.cands[b][i]["Lbar"] - mL[b], i) for i in cand[b])) for b in cl}
     depth = min(SPLIT, len(cl))
-    front, n_sim, counter, sol = {}, 0, [0], {}
+    d2 = min(depth2, len(cl))
+    front, n_sim, counter, counter2, sol = {}, 0, [0], [0], {}
 
     def dfs(k, te, le):
         nonlocal n_sim
         if k == depth:
             counter[0] += 1
             if (counter[0] - 1) % nparts != part:
+                return
+        if nsub > 1 and k == d2:  # 子分片：在本分片的前缀之内，第 depth2 层再轮流分
+            counter2[0] += 1
+            if (counter2[0] - 1) % nsub != sub:
                 return
         if k == len(cl):
             n_sim += 1
@@ -158,15 +163,20 @@ def cluster_front(inst, cl, days, cand, iv, mt, mL, E, budget, part, nparts):
     return front, n_sim
 
 
-def run(part, nparts, only_tie=None, only_delta=None, by_vec=False):
+def run(part, nparts, only_tie=None, only_delta=None, by_vec=False, sub=0, nsub=1):
     """by_vec=True：按向量编号 vi % nparts 分片，向量内不再按前缀拆分（向量多而小时更均衡）。
     每完成一个向量就写一次 .partial，可中断续跑；全部完成后才改名为正式分片文件（merge 只认正式文件）。"""
     t0 = time.time()
     R, insts, pick, inc, ev, z, V = setup()
     OUT.mkdir(parents=True, exist_ok=True)
     tag = "" if only_tie is None else f"_t{only_tie}" + ("" if only_delta is None else f"_d{only_delta}") + ("v" if by_vec else "")
-    final = OUT / f"part{part}of{nparts}{tag}.csv"
-    partial = OUT / f"part{part}of{nparts}{tag}.partial"
+    if nsub > 1:  # 子分片单独存放，全部完成后由 join_sub 拼回 part{part}of{nparts}{tag}.csv
+        SUB = OUT / "sub"
+        SUB.mkdir(parents=True, exist_ok=True)
+        final = SUB / f"part{part}of{nparts}{tag}_s{sub}of{nsub}.csv"
+    else:
+        final = OUT / f"part{part}of{nparts}{tag}.csv"
+    partial = final.with_suffix(".partial")
     rows, done = [], set()
     if partial.exists():
         old = pd.read_csv(partial)
@@ -198,7 +208,7 @@ def run(part, nparts, only_tie=None, only_delta=None, by_vec=False):
                 else:
                     sp, sn = (0, 1) if by_vec else (part, nparts)
                     for ci, c in enumerate(cls):
-                        fr_, ns = cluster_front(inst, c, v, cand, iv, p["mt"], p["mL"], E, budget, sp, sn)
+                        fr_, ns = cluster_front(inst, c, v, cand, iv, p["mt"], p["mL"], E, budget, sp, sn, sub, nsub)
                         new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=ci, tex=None, lex=None, n_sim=ns, status="簇", n_clusters=len(cls)))
                         for tex, lex in fr_.items():
                             new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=ci, tex=tex, lex=lex, n_sim=0, status="前沿", n_clusters=len(cls)))
@@ -324,4 +334,15 @@ if __name__ == "__main__":
     {"measure": measure, "merge": merge, "status": status}.get(sys.argv[1], lambda: None)()
     if sys.argv[1] == "run":
         a = sys.argv[2:]
-        run(int(a[0]), int(a[1]), int(a[2]) if len(a) > 2 else None, int(a[3]) if len(a) > 3 else None, by_vec=len(a) > 4 and a[4] == "v")
+        if len(a) > 4 and a[4].startswith("s"):  # run part nparts tie delta s<sub>/<nsub>
+            sb, ns_ = a[4][1:].split("/")
+            run(int(a[0]), int(a[1]), int(a[2]), int(a[3]), sub=int(sb), nsub=int(ns_))
+        else:
+            run(int(a[0]), int(a[1]), int(a[2]) if len(a) > 2 else None, int(a[3]) if len(a) > 3 else None, by_vec=len(a) > 4 and a[4] == "v")
+    if sys.argv[1] == "join_sub":  # join_sub part nparts tie delta nsub
+        a = sys.argv[2:]
+        fs = [OUT / "sub" / f"part{a[0]}of{a[1]}_t{a[2]}_d{a[3]}_s{k}of{a[4]}.csv" for k in range(int(a[4]))]
+        miss = [f.name for f in fs if not f.exists()]
+        assert not miss, f"子分片未齐：{miss}"
+        pd.concat([pd.read_csv(f) for f in fs]).to_csv(OUT / f"part{a[0]}of{a[1]}_t{a[2]}_d{a[3]}.csv", index=False, encoding="utf-8-sig")
+        print("已拼回", a)
