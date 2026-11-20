@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 rows = []
 
 # 复核状态：A = 已由 GPT 对当前版本复核；B = GPT 复核过上一版、当前版只用其脚本或检查器验证；C = 单方结果
-STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "A", "C"  # R29：问题 1、3、4 当前版本已由 GPT 第三批复核
+STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "B", "C"  # 问题 1 R29 已复核；问题 3、4 为 R33/R34 新版（全候选集），GPT 复核过 R25 版，新版只经独立检查器
 
 
 def put(key, val, src, ev, st, note=""):
@@ -50,12 +50,12 @@ for b in range(32, 46):
     put(f"P2.curve.{b}.A", p2.at[f"curve_B{b}", "A"], "p2/summary.csv", "R3/R4", STATUS_P2)
 
 p3 = pd.read_csv(R / "p3/summary.csv").set_index("name")
-for row, tag in [("下界（各批孤立最优）", "lb"), ("基线", "base"), ("主路线（加成对邻域）", "main")]:
+for row, tag in [("下界（各批孤立最优）", "lb"), ("基线", "base"), ("主路线（加多起点与打磨）", "main"), ("消融：剪枝候选（R25 做法）", "pruned")]:
     for k, col in [("tau", "tau"), ("L", "L"), ("delta", "delta")]:
-        put(f"P3.{tag}.{k}", p3.at[row, col], "p3/summary.csv", "R25", STATUS_P34)
+        put(f"P3.{tag}.{k}", p3.at[row, col], "p3/summary.csv", "R33", STATUS_P34)
     if tag != "lb":
-        put(f"P3.{tag}.D", p3.at[row, "D"], "p3/summary.csv", "R25", STATUS_P34)
-        put(f"P3.{tag}.V", p3.at[row, "V"], "p3/summary.csv", "R25", STATUS_P34)
+        put(f"P3.{tag}.D", p3.at[row, "D"], "p3/summary.csv", "R33", STATUS_P34)
+        put(f"P3.{tag}.V", p3.at[row, "V"], "p3/summary.csv", "R33", STATUS_P34)
 
 p4 = pd.read_csv(R / "p4/summary.csv")
 for i, tag in [(0, "p3"), (1, "main")]:
@@ -63,10 +63,10 @@ for i, tag in [(0, "p3"), (1, "main")]:
     for k, col in [("B", "调运总批次"), ("N", "调运总车数"), ("P", "出动总人数"), ("A", "代领代交等效车数"), ("tau", "人员调动执行总时间"),
                    ("delta", "开始偏离"), ("D", "调运总里程"), ("L", "载货车辆总行驶距离"), ("E", "失衡度"), ("pairs", "批次仓库对"),
                    ("vehkm", "车公里"), ("V", "V"), ("score", "合成分")]:
-        put(f"P4.{tag}.{k}", r[col], "p4/summary.csv", "R25", STATUS_P34)
+        put(f"P4.{tag}.{k}", r[col], "p4/summary.csv", "R34", STATUS_P34)
 ends = p4[p4["方案"].str.startswith("搜索终点")]["合成分"]
-put("P4.search.score_min", float(ends.min()), "p4/summary.csv", "R25", STATUS_P34, f"{len(ends)} 次搜索终点")
-put("P4.search.score_max", float(ends.max()), "p4/summary.csv", "R25", STATUS_P34)
+put("P4.search.score_min", float(ends.min()), "p4/summary.csv", "R34", STATUS_P34, f"{len(ends)} 次搜索终点")
+put("P4.search.score_max", float(ends.max()), "p4/summary.csv", "R34", STATUS_P34)
 
 ab = pd.read_csv(R / "extra/p3_ablation.csv").set_index("方案")
 for row, tag in [("关闭留置", "noleave"), ("关闭途经（每段只走直达）", "nopass"), ("关闭留置和途经", "none"),
@@ -116,13 +116,13 @@ for tag in ("p3", "p4"):
     st = pd.read_csv(R / f"{tag}/steps_main.csv")
     st = st[st.node.str.startswith("W")]
     st = st[[n not in fb.H[u] for n, u in zip(st.node, st.unit)]]
-    put(f"{tag.upper()}.arrivals_ext", len(st), f"{tag}/steps_main.csv", "R25", STATUS_P34, "到达 H(x) 以外仓库的总次数（含重复到访）")
+    put(f"{tag.upper()}.arrivals_ext", len(st), f"{tag}/steps_main.csv", "R33/R34", STATUS_P34, "到达 H(x) 以外仓库的总次数（含重复到访）")
     b = pd.read_csv(R / f"{tag}/batches_main.csv")
-    put(f"{tag.upper()}.n_leave_batches", int((b.n_leave > 0).sum()), f"{tag}/batches_main.csv", "R25", STATUS_P34)
-    put(f"{tag.upper()}.n_pass_batches", int((b.n_pass > 0).sum()), f"{tag}/batches_main.csv", "R25", STATUS_P34)
+    put(f"{tag.upper()}.n_leave_batches", int((b.n_leave > 0).sum()), f"{tag}/batches_main.csv", "R33/R34", STATUS_P34)
+    put(f"{tag.upper()}.n_pass_batches", int((b.n_pass > 0).sum()), f"{tag}/batches_main.csv", "R33/R34", STATUS_P34)
 b3 = pd.read_csv(R / "p3/batches_main.csv")
-put("P3.n_both_iso_opt", int(((b3.tau == b3.min_iso_tau) & ((b3.Lbar - b3.min_Lbar).abs() < 1e-6)).sum()), "p3/batches_main.csv", "R25", STATUS_P34, "同时达到孤立最少天数与最小载货距离的批次")
-put("P3.n_cands", int(b3.n_cands.sum()), "p3/batches_main.csv", "R25", STATUS_P34)
+put("P3.n_both_iso_opt", int(((b3.tau == b3.min_iso_tau) & ((b3.Lbar - b3.min_Lbar).abs() < 1e-6)).sum()), "p3/batches_main.csv", "R33", STATUS_P34, "同时达到孤立最少天数与最小载货距离的批次")
+put("P3.n_cands", int(b3.n_cands.sum()), "p3/batches_main.csv", "R33", STATUS_P34)
 
 for tag, path in (("P2", "p2/assign_main.csv"), ("P4", "p4/assign_main.csv")):
     a = pd.read_csv(R / path)
@@ -132,7 +132,7 @@ for tag, path in (("P2", "p2/assign_main.csv"), ("P4", "p4/assign_main.csv")):
         put(f"{tag}.case.{c}", int(n), path, "R25", "A" if tag == "P2" else STATUS_P34)
     put(f"{tag}.n_removed_batches", len(set(a.batch)) - len(set(a[a.option == "own"].batch)), path, "R25", "A" if tag == "P2" else STATUS_P34)
 a4 = pd.read_csv(R / "p4/assign_main.csv")
-put("P4.n_changed_vs_p3", int(a4.changed_vs_p3.sum()), "p4/assign_main.csv", "R25", STATUS_P34)
+put("P4.n_changed_vs_p3", int(a4.changed_vs_p3.sum()), "p4/assign_main.csv", "R33", STATUS_P34)
 tr = pd.read_csv(R / "p1/trace.csv")
 put("P1.n_blocks", len(tr), "p1/trace.csv", "R10", "A")
 for h, n in tr.how.value_counts().items():

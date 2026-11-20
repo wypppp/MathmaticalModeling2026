@@ -168,7 +168,8 @@ def measure():
     for v in vecs:
         dist[sum(abs(v[b] - inst.batches[b].a) for b in inst.ids)] += 1
     print(f"δ≤6 的出发日向量 {len(vecs)} 个（完整={complete}），按 δ 分布 {dict(sorted(dist.items()))}  {time.time() - t0:.1f}s")
-    s_inc = 1.3196587541981049
+    s_inc = inst.score(inst.evaluate(inc), REF)[0]
+    print(f"主结果合成分 {s_inc:.10f}")
     worst, tot = 0, 0
     for v in vecs:
         dlt = sum(abs(v[b] - inst.batches[b].a) for b in inst.ids)
@@ -216,14 +217,14 @@ def cluster_eval(inst, cl, days, cand, iv, mt, E, budget):
     return front, n_sim
 
 
-def v31(inst, vecs, mt, reps, n=300, seed=0):
+def v31(inst, vecs, mt, reps, n=300, seed=0, s_inc=1.3196587541981049):
     """随机检验：每批都在区间内时，分簇回放 = 整体回放（逐批逐站时刻）。"""
     rng = random.Random(seed)
     tested = fails = 0
     for _ in range(n):
         v = rng.choice(vecs)
         dlt = sum(abs(v[b] - inst.batches[b].a) for b in inst.ids)
-        E = int(math.floor((1.3196587541981049 - dlt * WD) / WT + 1e-9))
+        E = int(math.floor((s_inc - dlt * WD) / WT + 1e-9))
         cls, cand, iv, ok = clusters(inst, v, E, mt, reps)
         if not ok:
             continue
@@ -248,7 +249,7 @@ def run(cap=3_000_000):
     s_inc, V_inc = inst.score(inst.evaluate(inc), REF)
     reps, _ = collapse(inst)
     vecs, complete, mt = day_vectors(inst)
-    tested, fails = v31(inst, vecs, mt, reps, n=5000)
+    tested, fails = v31(inst, vecs, mt, reps, n=5000, s_inc=s_inc)
     print(f"V31：随机 5000 组中 {tested} 组每批都在区间内，分簇回放与整体回放不一致 {fails} 处  {time.time() - t0:.1f}s")
     mLall = {b: min(x["Lbar"] for x in inst.cands[b]) for b in inst.ids}
     rows, n_sim_tot = [], 0
