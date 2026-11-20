@@ -33,7 +33,12 @@ import f_routes as fr  # noqa: E402
 from f_run_p3 import load_assign  # noqa: E402
 
 OUT = ROOT / "results" / "F" / "p3_cert"
-REF = dict(l=(124, 12566.233135, 0.0), u=(134, 14412.883927, 5))  # R25 的标尺，固定
+_ref = ROOT / "results" / "F" / "p3" / "ref.csv"  # 与问题 3 主流程同一 J1 标尺（f_run_p3.py 写出）；没有时用 R25 的值
+if _ref.exists():
+    _r = pd.read_csv(_ref).iloc[0]
+    REF = dict(l=(_r.l_tau, _r.l_L, _r.l_delta), u=(_r.u_tau, _r.u_L, _r.u_delta))
+else:
+    REF = dict(l=(124, 12566.233135, 0.0), u=(134, 14412.883927, 5))
 
 
 def build():

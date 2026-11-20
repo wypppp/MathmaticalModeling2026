@@ -48,7 +48,8 @@ def main():
         init[r.batch] = (idx[0], int(r.start)) if idx else (inst.base_idx[r.batch], int(r.start))
     ev0 = inst.evaluate(init)
     print(f"R25 问题 4 方案在新规则下：可行={ev0['feasible']} {ev0['viol'][:3]} tau={ev0['tau']} L={ev0['L']:.3f} delta={ev0['delta']} D={ev0['D']}")
-    ref = REF25
+    r_ = pd.read_csv(ROOT / "results" / "F" / "p3" / "ref.csv").iloc[0]  # 与问题 3 同一 J1 标尺（f_run_p3.py 写出）
+    ref = dict(l=(r_.l_tau, r_.l_L, r_.l_delta), u=(r_.u_tau, r_.u_L, r_.u_delta))
     _, _, sol, ev = f_run_p3.search(inst, ref, init=init if ev0["feasible"] else None)
     assert ev["feasible"], ev["viol"]
     print("问题 4 重做路线", dict(tau=ev["tau"], L=round(ev["L"], 3), delta=ev["delta"], V=ev["V"], D=ev["D"]), f"{time.time() - t0:.0f}s")

@@ -110,11 +110,11 @@ def main():
     base0 = inst.baseline()
     evb = inst.evaluate(base0)
     print("基线", evb["feasible"], evb["viol"], dict(tau=evb["tau"], L=round(evb["L"], 3), delta=evb["delta"], V=evb["V"], D=evb["D"]))
-    calc = (inst.lb_tau, inst.lb_L, evb["tau"], evb["L"], evb["delta"])
-    pin = (REF25["l"][0], REF25["l"][1], REF25["u"][0], REF25["u"][1], REF25["u"][2])
-    if any(abs(a - b) > 1e-5 for a, b in zip(calc, pin)):
-        print(f"【报警】本次下界/基线 {calc} 与 J1 标尺 {pin} 不同；标尺仍用 R25 的值")
-    ref = REF25
+    # J1 的标尺按定义取当前模型的单项下界与规则基线（v2.5 改了路线空间，下界与基线随之变化；R33 时规则未变，故与 R25 相同）
+    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+    print(f"J1 标尺：下界 {ref['l']}，规则基线 {ref['u']}（R25：{REF25['l']} / {REF25['u']}）")
+    pd.DataFrame([dict(l_tau=ref["l"][0], l_L=ref["l"][1], l_delta=ref["l"][2], u_tau=ref["u"][0], u_L=ref["u"][1], u_delta=ref["u"][2])]).to_csv(
+        OUT / "ref.csv", index=False, encoding="utf-8-sig")
     base, ev1, sol, ev = search(inst, ref)
     print("主路线", ev["feasible"], ev["viol"], dict(tau=ev["tau"], L=round(ev["L"], 3), delta=ev["delta"], V=ev["V"], D=ev["D"]), f"{time.time() - t0:.1f}s")
     # 消融：R25 的做法（帕累托剪枝候选、不做多起点）
