@@ -242,18 +242,20 @@ def v31(inst, vecs, mt, reps, n=300, seed=0, s_inc=1.3196587541981049):
     return tested, fails
 
 
-def run(cap=3_000_000):
+def run(cap=3_000_000, part=0, nparts=1):
     t0 = time.time()
     OUT.mkdir(parents=True, exist_ok=True)
     inst, inc, D = build()
     s_inc, V_inc = inst.score(inst.evaluate(inc), REF)
     reps, _ = collapse(inst)
     vecs, complete, mt = day_vectors(inst)
-    tested, fails = v31(inst, vecs, mt, reps, n=5000, s_inc=s_inc)
+    tested, fails = v31(inst, vecs, mt, reps, n=5000 if part == 0 else 0, s_inc=s_inc)
     print(f"V31：随机 5000 组中 {tested} 组每批都在区间内，分簇回放与整体回放不一致 {fails} 处  {time.time() - t0:.1f}s")
     mLall = {b: min(x["Lbar"] for x in inst.cands[b]) for b in inst.ids}
     rows, n_sim_tot = [], 0
     for vi, v in enumerate(vecs):
+        if vi % nparts != part:
+            continue
         dlt = sum(abs(v[b] - inst.batches[b].a) for b in inst.ids)
         E = int(math.floor((s_inc - dlt * WD) / WT + 1e-9))
         budget = s_inc - dlt * WD
@@ -300,7 +302,8 @@ def run(cap=3_000_000):
         better = best < s_inc - EPS or (abs(best - s_inc) <= EPS and V < V_inc)
         rows.append(dict(row, status="已判定", n_sim=n_sim, best_score=best, better=better))
     df = pd.DataFrame(rows)
-    df.to_csv(OUT / "v32_vectors.csv", index=False, encoding="utf-8-sig")
+    tag = "" if nparts == 1 else f"_part{part}of{nparts}"
+    df.to_csv(OUT / f"v32_vectors{tag}.csv", index=False, encoding="utf-8-sig")
     print(f"V32：向量 {len(vecs)} 个（完整={complete}），回放 {n_sim_tot} 次  {time.time() - t0:.1f}s")
     print(df.groupby(["delta", "status"]).size().to_string())
     done = df[df.status == "已判定"]
@@ -309,7 +312,7 @@ def run(cap=3_000_000):
                        decided=len(done), undecided=int((df.status.str.startswith("规模")).sum()),
                        r4_infeasible=int((df.status.str.startswith("R4")).sum()),
                        better_found=bool(done.better.any()) if len(done) else False,
-                       best_decided=done.best_score.min() if len(done) else None)]).to_csv(OUT / "v32_summary.csv", index=False, encoding="utf-8-sig")
+                       best_decided=done.best_score.min() if len(done) else None)]).to_csv(OUT / f"v32_summary{tag}.csv", index=False, encoding="utf-8-sig")
 
 
 
@@ -384,4 +387,4 @@ if __name__ == "__main__":
     elif sys.argv[1] == "d5":
         delta5_search(*(int(x) for x in sys.argv[2:4]))
     else:
-        run()
+        run(part=int(sys.argv[2]) if len(sys.argv) > 2 else 0, nparts=int(sys.argv[3]) if len(sys.argv) > 3 else 1)

@@ -40,7 +40,8 @@ def main():
     out = [f"# {title}：代领代交逐笔清单（请对照原题录 2.5 核对）", "",
            f"> 由 `tools/delegation_list.py {tag}` 从 `results/F/{tag}/assign_main.csv` 生成。共 {len(moved)} 笔。",
            "> 每笔写明：谁替谁、什么方向、货在哪个仓库、要到哪个仓库、执行方这一批本来要去哪些仓库，以及本文判定的情形和该情形的原文。",
-           "> 请逐笔回答“是否符合所写情形”（是 / 否，否请写原因）。批次号是附件 4 的原批次号。“就近”一栏只供参考（本文按裁决 D2/W5 不另行要求）。", ""]
+           "> 请逐笔回答“是否符合所写情形”（是 / 否，否请写原因）。批次号是附件 4 的原批次号。“就近”一栏只供参考（本文按裁决 D2/W5 不另行要求）。",
+           "> **“共用”的口径（裁决 X3）**：有多个可用队属仓库的单位（U7：WQ、WU；U11：WO、WS），按该笔货物在附件 4 中指定的存放仓库判定是否与执行方共用（附件 3 官方方案即如此区分）。", ""]
     for k, r in moved.iterrows():
         x, y = r.to_unit, r.owner
         tb = int(r.to_batch)
@@ -64,6 +65,9 @@ def main():
             extra = f"；先暂存在 {x} 的队属仓库 {hx}，由 {y} 的原批 {b2} 到 {hx} 领回（须在本批回驻地之后出发）"
         elif r.case in ("R5", "R7"):
             extra = f"；{x} 驻地到 {y} 的队属仓库：" + "、".join(f"{h} {D[(x, h)]:.0f} km" for h in H[y])
+        unit_share = bool(set(H[x]) & set(H[y]))
+        if unit_share and r.case not in ("R1", "R6"):
+            extra += f"（注：{x} 与 {y} 在单位层面共用 {'、'.join(sorted(set(H[x]) & set(H[y])))}，但这笔货指定存放在 {r.h if r.dir == '领' else r.h}，与 {x} 不共用，按 X3 口径判定）"
         out += [f"**{k + 1}. 块 {r.block}**：{what}{extra}",
                 f"- {x} 的队属仓库：{'、'.join(H[x])}；{y} 的队属仓库：{'、'.join(H[y])}；{x} 这一批保留的外部目标仓库：{'、'.join(tgt) or '无'}",
                 f"- 本文判定：**{name}**。原文：“{text}”",

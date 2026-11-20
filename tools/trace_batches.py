@@ -107,7 +107,7 @@ def main():
                 cur_day = int(lg.arrive_day)
                 out_day(cur_day)
             kind = "回到驻地" if (i == len(stops) - 1) else ("途经（不作业）" if not sp["segs"] and not lg.rejoin else "到达")
-            line = f"- {clock(lg.arrive_h)} {kind} {sp['node']}（距上一站 {dist:.0f} km，行驶 {dur(dist / 62.5)}" +                 ("；超过 500 km，每天开 8 小时、途中过夜" if dist > 500 else "") + "）"
+            line = f"- {clock(lg.arrive_h)} {kind} {sp['node']}（距上一站 {dist:.0f} km，行驶 {dur(dist / 62.5)}" +                 ("；超过 500 km，每天开 8 小时，途中过夜" if dist > 500 else "") + "）"
             if sp["node"] == x and 0 < i < len(stops) - 1:
                 qs.append(f"途中经过自己驻地 {x}（没有结束本批任务，继续去下一站），原题是否允许？")
             out.append(line)
@@ -118,22 +118,29 @@ def main():
                     if lg.start_day == lg.arrive_day:
                         out.append(f"  - 排队等候 {dur(wait)}（前面有别的单位在作业；{cite(10)}）")
                     else:
-                        out.append(f"  - 当天轮不到，{md(int(lg.start_day))} {clock(lg.start_h)} 才开始作业（{cite(9, 10)}）")
-                    qs.append(f"在 {sp['node']} 排队等候 {dur(wait)}，是否符合第 9、10 条？")
+                        out.append(f"  - 当天轮不到（或已过 16:00），次日才开始作业（{cite(9, 10)}）")
+                        cur_day = int(lg.start_day)
+                        out_day(cur_day)
+                    qs.append(f"在 {sp['node']} 等候 {dur(wait)} 后才开始作业，是否符合第 9、10 条？")
                 for sg in sp["segs"]:
                     act = "装上" if sg["io"] == "发" else "卸下"
                     out.append(f"  - {act} {goods_text(sg, x)}")
+                if any(sg["follow"] == "否" for sg in sp["segs"] if sg["io"] == "发"):
+                    out.append(f"  - 车上全部已装货的车**留在 {sp['node']}**（留置），其余空车继续走，之后回来汇合（件 7 注 7）")
+                    qs.append(f"在 {sp['node']} 把车上全部已装货的车留下、空车继续走，之后回来汇合，是否符合原题对“留置”的规定？")
                 drops = [sg["who"] for sg in sp["segs"] if sg["io"] == "收" and sg["flag"] == 1 and sp["node"] not in own]
                 if drops and i < len(stops) - 2:
                     qs.append(f"在 {sp['node']} 卸下替 {'、'.join(drops)} 代领的货之后，还继续去别的仓库作业。原题代领情形②（被代领货物所在仓库和货主的队属仓库都在执行方的目标仓库之中）是否允许这样“路过时先卸”？")
-                    if sg["follow"] == "否":
-                        out.append(f"  - 装了这批货的车**留在 {sp['node']}**（留置），其余车继续走，之后回来汇合")
                 span = f"共 {c} 台次 × 0.4 小时 = {dur(c / 2.5)}（{cite(3)}）"
                 if lg.end_day > lg.start_day:
-                    out.append(f"  - {span}；每天只能作业到 16:00，跨到 {md(int(lg.end_day))} {clock(lg.end_h)} 才做完（{cite(2)}）")
+                    out.append(f"  - {clock(lg.start_h)} 开始作业，{span}；每天只能作业到 16:00（{cite(2)}）")
+                    for d in range(int(lg.start_day) + 1, int(lg.end_day) + 1):
+                        cur_day = d
+                        out_day(d)
+                        out.append(f"- 08:00 在 {sp['node']} 继续作业" + (f"，{clock(lg.end_h)} 做完" if d == int(lg.end_day) else "，做到 16:00"))
                     qs.append(f"在 {sp['node']} 装卸 {c} 台次，跨日做完（每天 8:00–16:00），是否符合第 2、3 条？")
                 else:
-                    out.append(f"  - {span}，{clock(lg.end_h)} 做完")
+                    out.append(f"  - {clock(lg.start_h)} 开始作业，{span}，{clock(lg.end_h)} 做完")
             if lg.rejoin:
                 out.append(f"  - 与此前留在 {sp['node']} 的车汇合")
             if i + 1 < len(stops):
@@ -141,14 +148,15 @@ def main():
                 dn = float(D[(sp["node"], nxt)]) if sp["node"] != nxt else 0.0
                 if lg.depart_day > lg.end_day or (lg.depart_day == lg.end_day and lg.depart_h - lg.end_h > 1e-6):
                     if dn > 500:
-                        why = f"下一段到 {nxt} {dn:.0f} km 超过 500 km，要整天行驶，只能 8:00 出发、途中过夜"
+                        why = f"下一段到 {nxt} {dn:.0f} km 要开 {dur(dn / 62.5)}，超过一天的 8 小时工作时长，当天剩余时间无法到达"
                     else:
-                        why = f"下一段到 {nxt} {dn:.0f} km 要开 {dur(dn / 62.5)}，16:00 前到不了"
+                        why = f"下一段到 {nxt} {dn:.0f} km 要开 {dur(dn / 62.5)}，当天剩余时间到不了"
                     out.append(f"  - **停在 {sp['node']} 过夜**：{why}，所以次日 8:00 再出发（{cite(4)}）")
                     qs.append(f"在 {sp['node']} 做完后因“{why}”而停到次日 8:00，是否符合第 4 条？")
-                    cur_day = int(lg.depart_day)
-                    out_day(cur_day)
-                    out.append(f"- 08:00 从 {sp['node']} 出发，前往 {nxt}" + ("（全天行驶）" if dn > 500 else ""))
+                    if int(lg.depart_day) != cur_day:
+                        cur_day = int(lg.depart_day)
+                        out_day(cur_day)
+                    out.append(f"- 08:00 从 {sp['node']} 出发，前往 {nxt}" + ("（超过 500 km，途中过夜）" if dn > 500 else ""))
             prev = sp["node"]
         qs = list(dict.fromkeys(qs))[:5]
         if len(qs) < 3:
