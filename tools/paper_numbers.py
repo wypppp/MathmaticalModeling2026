@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 rows = []
 
 # 复核状态：A = 已由 GPT 对当前版本复核；B = GPT 复核过上一版、当前版只用其脚本或检查器验证；C = 单方结果
-STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "B", "C"  # 问题 1 R29 已复核；问题 3、4 为 spec v2.5 新版（R38/R39），GPT 复核过 v2.4 版（R37），新版只经独立检查器
+STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "A", "C"  # 问题 1 R29、问题 2 已复核；问题 3、4 为 spec v2.5 版（R38/R39），GPT 第五批（R41）复核一致
 
 
 def put(key, val, src, ev, st, note=""):

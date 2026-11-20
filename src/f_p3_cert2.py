@@ -1,15 +1,20 @@
 """问题 3 最优性证书第二轮（evidence V31–V32）：按偏离分情形 + 固定出发日 + 分簇精确枚举。
 
 推理：
-- 合成分 = (τ−124)/10 + (L̄−12566.233)/1846.65 + δ/5。主结果 s* = 1.319659，δ≥7 时仅偏离项就 ≥1.4，不可能更好；
-  δ=d 时能更好须 τ ≤ t_max(d) = 124 + ⌊(s* − d/5)·10⌋，即每批的超额 τ（相对最少孤立 τ）之和 ≤ E(d) = t_max − 124。
+- 合成分 = (τ−l_τ)/(u_τ−l_τ) + (L̄−l_L)/(u_L−l_L) + δ/5，标尺读 results/F/p3/ref.csv（v2.5：126/13257.751 至 134/14445.690）。
+  v2.5 主结果 s* = 1.406160918288 > 1.4，δ≥7 **不能**只靠偏离项排除（v2.4 时 s* = 1.3197 才可以）。
+  δ≥7 用 `d7` 子命令：各批孤立 min(τ/(u_τ−l_τ) + L̄/(u_L−l_L)) 之和减标尺下端 = 0.155492422832，
+  故 δ≥7 时 z ≥ 1.555 > s*（回放 τ ≥ 孤立 τ，L̄ 只由路线决定）。GPT 第五批在放松孤立 S10 的块级路线上独立得到同一数值。
+  δ=d 时能更好须 τ ≤ t_max(d)，即每批的超额 τ（相对最少孤立 τ）之和 ≤ E(d)。
+- 局限：候选只含孤立回放满足 S10 的路线；排队可能让孤立违反 S10 的路线变得合规。这一缺口由 GPT 第五批
+  的块级证书（放松孤立 S10）覆盖，两份证书结论一致。
 - 由 V26（回放 τ ≥ 孤立 τ ≥ 最少孤立 τ），任一更好方案中每批的孤立 τ ≤ min_b + E，回放结束日 ≤ 出发日 + min_b + E − 1。
 - 固定出发日向量后，按这些区间把批次分簇：区间不重叠、或不共用作业仓库且不同单位的批次之间没有相互作用（V31）；
   R4 关系的两批若区间不可能相碰，先后用算术判定，否则并入同簇回放。
 - 每簇枚举路线组合（只用孤立值之和剪枝，不用部分回放剪枝，因为先到先服务不单调），整簇回放做全部合规判断，
   保留 (τ, L̄) 前沿；各簇前沿组合后判断是否存在合成分 < s*（或同分 V 更小）的方案。
 - 路线按“时序签名”合并（逐站节点、卸装台次、留置/汇合、R4 相关步）：签名相同的路线回放时刻相同，只保留 L̄ 最小者（V31 检验）。
-用法：python src/f_p3_cert2.py measure | run | d5（δ=5 的 4 个向量做多起点路线搜索，启发式）
+用法：python src/f_p3_cert2.py measure | run | d7 | d5（δ=5 的 4 个向量做多起点路线搜索，启发式）
 """
 from __future__ import annotations
 
@@ -437,11 +442,29 @@ def ties(vec_ids):
         print(rows[-1], f"{time.time() - t0:.0f}s")
     pd.DataFrame(rows).to_csv(OUT / f"ties_{'_'.join(map(str, vec_ids))}.csv", index=False, encoding="utf-8-sig")
 
+def d7_bound(s_inc=1.406160918288):
+    """δ≥7 的排除：逐批孤立 min(τ·WT + L̄·WL) 之和减标尺下端，是任何方案时间、距离两项归一化之和的下界。"""
+    inst, _, _ = build()
+    rows = []
+    for b in inst.ids:
+        c = min(inst.cands[b], key=lambda c: c["tau"] * WT + c["Lbar"] * WL)
+        rows.append(dict(batch=b, n_cands=len(inst.cands[b]), tau=c["tau"], Lbar=c["Lbar"],
+                         min_tau=min(x["tau"] for x in inst.cands[b]), min_Lbar=min(x["Lbar"] for x in inst.cands[b])))
+    df = pd.DataFrame(rows)
+    jt = float((df.tau * WT + df.Lbar * WL).sum() - (REF["l"][0] * WT + REF["l"][1] * WL))
+    OUT.mkdir(parents=True, exist_ok=True)
+    df.to_csv(OUT / "d7_bound.csv", index=False, encoding="utf-8-sig")
+    print(f"时间+距离两项归一化之和 ≥ {jt:.12f}；δ≥7 时 z ≥ {1.4 + jt:.12f}，主结果 {s_inc:.12f}，"
+          f"{'可排除' if 1.4 + jt > s_inc + 1e-12 else '不能排除'}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] == "measure":
         measure()
     elif sys.argv[1] == "ties":
         ties([int(x) for x in sys.argv[2:]])
+    elif sys.argv[1] == "d7":
+        d7_bound()
     elif sys.argv[1] == "d5":
         delta5_search(*(int(x) for x in sys.argv[2:4]))
     else:
