@@ -359,6 +359,33 @@ def sens():
     pd.DataFrame(rows).to_csv(OUT / "sens.csv", index=False, encoding="utf-8-sig")
 
 
+def no_base_via(e):
+    """途中不经过本单位驻地（驻地只作起点和终点）；附件 7 注 2“依次填入经过的货物仓库直至回到驻地”。"""
+    u = e["steps"][-1].node
+    return all(st.node != u for st in e["steps"][:-1])
+
+
+def p3_nobase():
+    """人在 review/human_trace_初稿.md 中质疑途中经过驻地：问题 3 在“禁止途中经过驻地（仍可途经仓库）”与“禁止一切途经”下的结果。"""
+    rows = []
+    inst0, base0, evb0 = run3(a3)
+    ref = dict(l=(inst0.lb_tau, inst0.lb_L, 0.0), u=(evb0["tau"], evb0["L"], evb0["delta"]))
+    for tag, flt in (("禁止途中经过驻地", no_base_via), ("禁止一切途经", lambda e: e["n_noop"] == 0)):
+        r = run3(a3, cand_filter=flt)
+        if r is None:
+            rows.append(dict(方案=tag, 可行=False, 说明="有批次无合规路线"))
+            continue
+        ins, b, eb = r
+        if not eb["feasible"]:
+            rows.append(dict(方案=tag, 可行=False, 说明="基线排不出"))
+            continue
+        sol, ev = q3_search(ins, ref, b)
+        rows.append(dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"], V=ev["V"],
+                         候选路线=sum(len(ins.cands[x]) for x in ins.ids), 孤立下界_天=ins.lb_tau, 孤立下界_km=ins.lb_L))
+        print(rows[-1])
+    pd.DataFrame(rows).to_csv(OUT / "p3_nobase.csv", index=False, encoding="utf-8-sig")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
@@ -375,6 +402,8 @@ if __name__ == "__main__":
         sens()
     if what == "s12":
         p3_s12()
+    if what == "nobase":
+        p3_nobase()
     if what in ("p4rules", "all"):
         p4_rules()
     print(f"用时 {time.time() - t0:.0f}s")

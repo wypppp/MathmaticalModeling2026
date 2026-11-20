@@ -20,6 +20,8 @@ import f_engine as fe
 MAX_VISIT = 2
 MAX_KM = 2000.0
 LEAVE_WAIT_LIMIT = True  # G14：留置车也受“最多等待 1 天”限制；False 为敏感性（留置不受限）
+ALLOW_VIA = False  # 【裁X1】每段按附件 1 的直达距离，路线中只出现作业站（及汇合站、终点驻地）；True 为 R33 及以前的“途经”读法（敏感性）
+LEAVE_MODE = "literal"  # 【裁X2】literal：留置时车上全部已装车辆留下、其余空车继续（件 7 注 7、正文第 78 行）；"loaded_here"：只留本站刚装的货的任一子集（R33 及以前）
 
 
 @dataclass
@@ -124,7 +126,9 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
                     nxt[a, b] = nxt[a, k]
 
     def via(a, b):
-        """a 到 b 最短路上的途经点（不含 a、b），作为无动作 Step。"""
+        """a 到 b 最短路上的途经点（不含 a、b），作为无动作 Step。ALLOW_VIA=False 时不插途经点。"""
+        if not ALLOW_VIA:
+            return []
         out, cur = [], a
         while nxt[cur, b] != b:
             cur = nxt[cur, b]
@@ -137,7 +141,7 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
         if ext and pending & own_send:
             return
         if not pending and not onboard and not left:
-            d = dc[pos, unit]
+            d = dc[pos, unit] if ALLOW_VIA else (float(D.at[pos, unit]) if pos != unit else 0.0)
             if dist + d <= max_km + 1e-9:
                 res.append(steps + via(pos, unit) + [fe.Step(unit)])
             return
@@ -159,9 +163,12 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
             v2 = dict(visits)
             v2[n] = v2.get(n, 0) + 1
             may_defer = v2[n] < MAX_VISIT
-            legs = [(dc[pos, n], via(pos, n))]
-            if float(D.at[pos, n]) > dc[pos, n] + 1e-9:
-                legs.append((float(D.at[pos, n]), []))  # 直达虽远，但可能少跨一天
+            if ALLOW_VIA:
+                legs = [(dc[pos, n], via(pos, n))]
+                if float(D.at[pos, n]) > dc[pos, n] + 1e-9:
+                    legs.append((float(D.at[pos, n]), []))  # 直达虽远，但可能少跨一天
+            else:
+                legs = [(float(D.at[pos, n]), [])]
             for S in _subsets(ld_all):
                 if len(S) < len(ld_all) and not may_defer:
                     continue
@@ -181,7 +188,10 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
                 base = dict(node=n, unload={g: s[g] for g in sorted(un)}, load={g: s[g] for g in S}, rejoin=rejoin)
                 leave_opts = [()]
                 if allow_leave and S and pend2 and n not in lf and may_defer:
-                    leave_opts += [L for L in _subsets(S) if L]
+                    if LEAVE_MODE == "literal":
+                        leave_opts.append(tuple(sorted(ob | set(S))))  # 车上全部已装的货（含此前各站装的）连车留下，其余空车继续
+                    else:
+                        leave_opts += [L for L in _subsets(S) if L]
                 for L in leave_opts:
                     Lset = set(L)
                     c = fe.ceil_(sum(s[g] for g in L)) if L else 0

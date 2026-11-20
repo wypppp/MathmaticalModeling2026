@@ -238,6 +238,8 @@ def main():
             for g in onboard:
                 g[4] += d
             pos = n
+            if not st["segs"] and n not in left and i < len(bt["stops"]) - 1:
+                V("S15途经", b, f"第 {i} 站 {n} 既不作业也不汇合（【裁X1】每段按直达距离，不得途经）")
             if n in left:  # 包 3 第 9 条：先汇合，同站再次留置不覆盖旧记录
                 if n != list(left)[-1]:
                     V("S11", b, f"在 {n} 汇合，但最近一次留置在 {list(left)[-1]}（应按相反顺序汇合）")
@@ -261,7 +263,7 @@ def main():
                         row = [owner, it, q, e1, 0.0, n, sg["flag"], False, i]
                         if sg["flag"] == -1:
                             dj_load[(owner, n)].append(i)
-                        (new_left if sg["follow"] == "否" else onboard).append(row)
+                        onboard.append(row)  # 留置在本站作业完后整体判定（【裁X2】件 7 注 7：当前已装车的车辆全部留下）
                         if n in TEAM and n not in own and sg["flag"] == 0:
                             own_ld[(x, it, n, q)].append((st["arrive"], b, i))
                         if n in TEAM and n not in own and sg["flag"] == 0 and "领回" in sg["note"]:
@@ -298,6 +300,12 @@ def main():
                         targets.add(n)
                     else:
                         special.add(n)
+            flags = {sg["follow"] for sg in st["segs"] if sg["io"] == "发"}
+            if "否" in flags:
+                if "是" in flags:
+                    V("S11", b, f"{n}：同一站部分已装货留置、部分随行（件 7 注 7：留置的是当前已装车的全部车辆，其余空车继续）")
+                new_left = onboard
+                onboard = []
             if new_left:
                 left[n] = new_left
                 movT -= ceil_(sum(g[3] for g in new_left))
