@@ -62,6 +62,7 @@ def dump(tag, inst, sol, ev):
     pd.DataFrame(wl).to_csv(OUT / f"wh_load_{tag}.csv", index=False, encoding="utf-8-sig")
 
 
+MAX_VEC = 12
 REF25 = dict(l=(124, 12566.233135, 0.0), u=(134, 14412.883927, 5))  # J1 标尺：人裁 J1 时的下界与规则基线（R25），固定不随候选集变
 
 
@@ -81,7 +82,10 @@ def search(inst, ref, log=print, multistart=True, init=None):
     if not multistart:
         return base, ev1, sol, ev1
     import f_p3_cert2 as c2
-    vecs, complete, _ = c2.day_vectors(inst, dmax=ev1["delta"])
+    vecs, complete, _ = c2.day_vectors(inst, dmax=ev1["delta"], limit=200)
+    if len(vecs) > MAX_VEC:  # 补充实验中 δ 较大的变体：只取 δ 最小的 MAX_VEC 个向量（主结果只有 4 个，不受影响）
+        vecs = sorted(vecs, key=lambda v: sum(abs(v[b] - inst.batches[b].a) for b in inst.ids))[:MAX_VEC]
+        complete = False
     pool = [(f_p3.key3(inst, ev1, ref), sol)]
     for vi, v in enumerate(vecs):
         s2, k2 = f_p3.fixed_day_search(inst, ref, v, 30, seed=vi, init=sol)

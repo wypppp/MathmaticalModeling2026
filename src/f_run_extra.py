@@ -1,5 +1,8 @@
 """补充实验：问题 3 的消融与合成方式敏感性；代领③的对照与自取量；问题 4 的批次数折衷；口径灵敏度。
 
+R36 起与主流程一致：问题 3 类的方案用全候选集 + f_run_p3.search（坐标下降、成对邻域、多起点、打磨）；
+问题 4 类的改派搜索沿用 R25 的剪枝候选（f_p4.P4），终点再映射到全候选集用 f_run_p3.search 重做路线（同 f_run_p4_reroute）。
+
 用法：python src/f_run_extra.py [p3|r3|p4b|rules|p4rules|sens|all]
 输出：results/F/extra/*.csv
 """
@@ -19,6 +22,7 @@ import f_p2  # noqa: E402
 import f_p3  # noqa: E402
 import f_p4  # noqa: E402
 import f_parse as fp  # noqa: E402
+import f_run_p3  # noqa: E402
 from f_run_p3 import load_assign  # noqa: E402
 
 OUT = ROOT / "results" / "F" / "extra"
@@ -28,12 +32,31 @@ a3 = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
 
 
 def run3(assign, **kw):
-    inst = f_p3.Instance(assign, batches, blocks, cap, D, **{"prune": True, **kw})
+    inst = f_p3.Instance(assign, batches, blocks, cap, D, **kw)
     if not inst.routable:
         return None
     base = inst.baseline()
     evb = inst.evaluate(base)
     return inst, base, evb
+
+
+def q3_search(inst, ref, start=None):
+    """与问题 3 主流程相同的搜索；返回 (解, 回放结果)。"""
+    _, _, sol, ev = f_run_p3.search(inst, ref, log=lambda *x: None, init=start)
+    return sol, ev
+
+
+def q4_finalize(a, inst_p, sol_p, ref):
+    """把剪枝实例上的问题 4 终点映射到全候选集，按主流程重做路线（同 f_run_p4_reroute）。返回 (全候选实例, 解, 回放结果)。"""
+    instF = f_p3.Instance(a, batches, blocks, cap, D)
+    init = {}
+    for b, (ri, day) in sol_p.items():
+        steps = inst_p.cands[b][ri]["steps"]
+        idx = [i for i, c in enumerate(instF.cands[b]) if c["steps"] == steps]
+        init[b] = (idx[0] if idx else instF.base_idx[b], day)
+    ok = instF.evaluate(init)["feasible"]
+    sol, ev = q3_search(instF, ref, init if ok else None)
+    return instF, sol, ev
 
 
 def p3_ablation():
@@ -51,8 +74,7 @@ def p3_ablation():
         if start is None:
             rows.append(dict(方案=tag, 可行=False, 说明="基线规则排不出"))
             return
-        sol, _ = ins.improve(start, ref)
-        ev = ins.evaluate(sol)
+        sol, ev = q3_search(ins, ref, start)
         z = sum((ev[k] - l) / ((u - l) if u - l > 1e-9 else 1) for k, l, u in zip(("tau", "L", "delta"), ref["l"], ref["u"]))
         rows.append(dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"], 车公里=ev["veh_km"],
                          V=ev["V"], 等权合成分=z, 留置批次=sum(ins.cands[x][sol[x][0]]["n_leave"] > 0 for x in ins.ids),
@@ -97,10 +119,11 @@ def r3_study():
     # 禁用③的问题 3、问题 4（同一套标尺）
     inst0, base0, evb0 = run3(a3)
     ref = dict(l=(inst0.lb_tau, inst0.lb_L, 0.0), u=(evb0["tau"], evb0["L"], evb0["delta"]))
-    instN = f_p3.Instance(aN, batches, blocks, cap, D, prune=True)
+    instNF = f_p3.Instance(aN, batches, blocks, cap, D)
+    _, evN = q3_search(instNF, ref)
+    instN = f_p3.Instance(aN, batches, blocks, cap, D, prune=True)  # 问题 4 改派搜索的起点（剪枝实例上的路线编号）
     bN = instN.baseline()
     solN, _ = instN.improve(bN, ref)
-    evN = instN.evaluate(solN)
     rows.append(dict(项目="禁用③：问题 3（天/载货距离/偏离/里程）", 值=f"{evN['tau']}/{evN['L']:.3f}/{evN['delta']}/{evN['D']:.0f}", 可行=evN["feasible"]))
     _, tot3, _ = f_p2.summarize(a3, batches, blocks, cap)
     rW = f_p2.solve(batches, blocks, cap, D, fix_batches=tot["B"], levels=("U9", "W", "A"), allow_R3=False)
@@ -111,7 +134,7 @@ def r3_study():
         if best is None or sc < best[0]:
             best = (sc, a, sol, inst)
     sc, a, sol, inst = best
-    ev = inst.evaluate(sol)
+    inst, sol, ev = q4_finalize(a, inst, sol, ref)
     _, det = P.score(a, ev)
     rows.append(dict(项目="禁用③：问题 4（批次/天/载货距离/偏离/失衡度/仓库对/代领代交/里程）",
                      值=f"{det['B']}/{det['tau']}/{det['L']:.3f}/{det['delta']}/{det['E']:.4f}/{det['pairs']}/{det['A']:.3f}/{det['D']:.0f}", 可行=ev["feasible"]))
@@ -135,7 +158,7 @@ def p4_batches():
             rows.append(dict(批次=nb, 说明="起点排不出"))
             continue
         s0, _ = ins.improve(s0, ref)
-        e0 = ins.evaluate(s0)
+        _, e0 = q3_search(f_p3.Instance(a0, batches, blocks, cap, D), ref)  # 报告用：全候选集 + 主流程搜索
         _, t0, _ = f_p2.summarize(a0, batches, blocks, cap)
         rows.append(dict(批次=nb, 方案="先指派后排程（代领代交最少）", 执行总时间=e0["tau"], 载货总行驶距离=e0["L"], 开始偏离=e0["delta"], 失衡度=t0["E"], 批次仓库对=t0["pairs"],
                          代领代交等效车数=t0["A"], 总车数=t0["N"], 总人数=t0["P"], 调运总里程=e0["D"], 车公里=e0["veh_km"], V=e0["V"]))
@@ -146,8 +169,8 @@ def p4_batches():
             if best is None or sc < best[0]:
                 best = (sc, a, sol, inst)
         sc, a, sol, inst = best
-        ev = inst.evaluate(sol)
-        _, det = P.score(a, ev)
+        inst, sol, ev = q4_finalize(a, inst, sol, ref)
+        sc, det = P.score(a, ev)
         rows.append(dict(批次=nb, 方案="联合搜索", 合成分=sc, 执行总时间=det["tau"], 载货总行驶距离=det["L"], 开始偏离=det["delta"], 失衡度=det["E"], 批次仓库对=det["pairs"],
                          代领代交等效车数=det["A"], 总车数=det["N"], 总人数=det["P"], 调运总里程=det["D"], 车公里=det["veh_km"], V=det["V"]))
         print(rows[-2], rows[-1], sep="\n")
@@ -165,8 +188,7 @@ def p3_rules():
         try:
             inst, base, evb = run3(a3)
             ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
-            sol, _ = inst.improve(base, ref)
-            ev = inst.evaluate(sol)
+            sol, ev = q3_search(inst, ref)
         finally:
             fe.OPT.clear()
             fe.OPT.update(saved)
@@ -184,8 +206,9 @@ def p4_rules(opt=None):
     try:
         inst3, base, evb = run3(a3)
         ref3 = dict(l=(inst3.lb_tau, inst3.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
-        sol3, _ = inst3.improve(base, ref3)
-        ev3 = inst3.evaluate(sol3)
+        _, ev3 = q3_search(inst3, ref3)  # 问题 3 方案：全候选集 + 主流程搜索
+        inst3p = f_p3.Instance(a3, batches, blocks, cap, D, prune=True)  # 问题 4 改派搜索的起点
+        sol3, _ = inst3p.improve(inst3p.baseline(), ref3)
         _, tot3, _ = f_p2.summarize(a3, batches, blocks, cap)
         nB = tot3["B"]
         rW = f_p2.solve(batches, blocks, cap, D, fix_batches=nB, levels=("U9", "W", "A"))
@@ -205,7 +228,7 @@ def p4_rules(opt=None):
                     runs.append((f"自仓库对最少解出发/种子{sd}", a, sol, inst, sc))
         name, a, sol, inst, sc = min(runs, key=lambda r: r[4])
         sol, _ = inst.improve(sol, ref3)
-        ev = inst.evaluate(sol)
+        inst, sol, ev = q4_finalize(a, inst, sol, ref3)
         sc, det = P.score(a, ev)
         s3, d3 = P.score(a3, ev3)
         rows = []
@@ -265,7 +288,7 @@ def p3_s12():
 
 
 def _p3_once(assign, tag, cand_filter=None):
-    inst = f_p3.Instance(assign, batches, blocks, cap, D, cand_filter=cand_filter, prune=True)
+    inst = f_p3.Instance(assign, batches, blocks, cap, D, cand_filter=cand_filter)
     if not inst.routable:
         return dict(方案=tag, 可行=False, 说明="有批次无合规路线：" + " ".join(str(b) for b in inst.ids if not inst.cands[b]))
     base = inst.baseline()
@@ -273,8 +296,7 @@ def _p3_once(assign, tag, cand_filter=None):
     if not evb["feasible"]:
         return dict(方案=tag, 可行=False, 说明="基线排不出")
     ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
-    sol, _ = inst.improve(base, ref)
-    ev = inst.evaluate(sol)
+    sol, ev = q3_search(inst, ref, base)
     return dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"],
                 基线_天=evb["tau"], 基线_km=evb["L"], 孤立下界_天=inst.lb_tau, 孤立下界_km=inst.lb_L)
 
