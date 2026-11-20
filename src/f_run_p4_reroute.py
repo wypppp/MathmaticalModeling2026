@@ -36,7 +36,9 @@ def main():
     a3 = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
     a4 = load_assign(OUT / "assign_main.csv", blocks)
     # R25 的问题 4 方案：在剪枝实例上取路线，映射到全候选实例
-    old = pd.read_csv(OUT / "batches_main_R25.csv")  # R25 方案的台账（路线编号对应剪枝候选集）；batches_main.csv 已是本脚本的输出
+    src_ledger = OUT / "batches_search.csv" if (OUT / "batches_search.csv").exists() else OUT / "batches_main_R25.csv"
+    old = pd.read_csv(src_ledger)  # 改派搜索终点（f_run_p4.py 输出，剪枝实例上的路线编号）；没有时用 R25 方案
+    print("起点台账：", src_ledger.name)
     instp = f_p3.Instance(a4, batches, blocks, cap, D, prune=True)
     inst = f_p3.Instance(a4, batches, blocks, cap, D)
     init = {}

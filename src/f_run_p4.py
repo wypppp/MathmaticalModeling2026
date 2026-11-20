@@ -93,6 +93,8 @@ def main():
     print(sdf.T.to_string())
     # 台账与结果表
     dump3("main", inst, sol, ev)
+    import shutil
+    shutil.copy(OUT / "batches_main.csv", OUT / "batches_search.csv")  # 改派搜索终点（剪枝实例上的路线编号），供 f_run_p4_reroute.py 读取
     rows = []
     for k in blocks:
         o = a[k.id]
