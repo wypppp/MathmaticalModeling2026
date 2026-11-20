@@ -14,6 +14,7 @@ import f_engine as fe
 import f_routes as fr
 
 LAST_DAY = 91
+R4_RULE = "phys"  # D15：phys = 物理先后（spec 现行）；batch = β′ 出发日晚于 β 回驻地日（A5 备选读法，敏感性用）
 
 
 class Instance:
@@ -126,9 +127,11 @@ class Instance:
                 viol.append(("S4", u))
         for kid, be, br, hx, g_in, g_out in self.r4:
             t_un = next(lg.end for st, lg in zip(self.cands[be][sol[be][0]]["steps"], res[be].logs) if g_in in st.unload)
-            t_ld = next(lg.start for st, lg in zip(self.cands[br][sol[br][0]]["steps"], res[br].logs) if g_out in st.load)
-            if t_ld < t_un:
+            t_ar = next(lg.arrive for st, lg in zip(self.cands[br][sol[br][0]]["steps"], res[br].logs) if g_out in st.load)
+            if t_ar < t_un:  # spec R4：β′ 到达 h_x 的时刻 ≥ β 在 h_x 卸完的时刻（A5 前误用了开始作业时刻）
                 viol.append(("R4先后", be, br))
+            if R4_RULE == "batch" and res[br].start_day <= res[be].end_day:  # D15 备选：整批先后
+                viol.append(("R4整批先后", be, br))
         tau = sum(res[b].tau for b in self.ids)
         L = sum(res[b].Lbar for b in self.ids)
         delta = sum(abs(sol[b][1] - self.batches[b].a) for b in self.ids)

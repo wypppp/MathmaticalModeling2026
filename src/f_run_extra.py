@@ -223,6 +223,47 @@ def p4_rules(opt=None):
     print(df.to_string(index=False))
 
 
+def s12_ok(e):
+    """S12：自有送交货（从执行单位可用的队属仓库装、送到外面）必须在到访任何外部仓库作业之前装车。"""
+    steps = e["steps"]
+    u = steps[-1].node
+    own = set(fb.H[u])
+    first_ext = next((i for i, st in enumerate(steps) if st.node.startswith("W") and st.node not in own and (st.load or st.unload)), None)
+    if first_ext is None:
+        return True
+    for i, st in enumerate(steps):
+        for g in st.load:
+            a, z = str(g).split(">")[:2]
+            z = z.split("#")[0]
+            if a in own and z not in own and i > first_ext:
+                return False
+    return True
+
+
+def p3_s12():
+    """Gemini A5 第 3 轮：路线枚举未执行 S12。在同一指派下只保留满足 S12 的路线，重做问题 3，量化影响。只读分析。"""
+    rows = []
+    for tag, flt, r4 in (("现行（未执行 S12）", None, "phys"), ("执行 S12", s12_ok, "phys"), ("D15 整批先后", None, "batch"), ("执行 S12 + D15 整批先后", s12_ok, "batch")):
+        f_p3.R4_RULE = r4
+        inst = f_p3.Instance(a3, batches, blocks, cap, D, cand_filter=flt)
+        if not inst.routable:
+            bad = [b for b in inst.ids if not inst.cands[b]]
+            rows.append(dict(方案=tag, 可行=False, 排不出的批次=" ".join(map(str, bad))))
+            print(rows[-1])
+            continue
+        base = inst.baseline()
+        evb = inst.evaluate(base)
+        ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+        sol, _ = inst.improve(base, ref)
+        ev = inst.evaluate(sol)
+        rows.append(dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"], V=ev["V"],
+                         基线_天=evb["tau"], 基线_km=evb["L"], 基线_偏离=evb["delta"], 孤立下界_天=inst.lb_tau, 孤立下界_km=inst.lb_L,
+                         最长批里程=max(min(c["D"] for c in inst.cands[b]) for b in inst.ids)))
+        print(rows[-1])
+    f_p3.R4_RULE = "phys"
+    pd.DataFrame(rows).to_csv(OUT / "p3_s12.csv", index=False, encoding="utf-8-sig")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
@@ -235,6 +276,8 @@ if __name__ == "__main__":
         p4_batches()
     if what in ("rules", "all"):
         p3_rules()
+    if what == "s12":
+        p3_s12()
     if what in ("p4rules", "all"):
         p4_rules()
     print(f"用时 {time.time() - t0:.0f}s")
