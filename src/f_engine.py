@@ -31,6 +31,7 @@ OPT = dict(
     no_ceil=False,       # True：作业车数 c = s⁺ + s⁻ 不取整（G7/G15 的备选）
     load_anytime=False,  # True：装卸不受 8:00–16:00 限制，可连续作业到夜间（录3.9“不考虑仓库的工作时段”的备选读法）；仓库日容量照计
     no_wh_cap=False,     # True：仓库不排队、无日容量（S8/S9 关闭，诊断用）
+    own_queue=True,      # True（spec S9 字面）：执行单位在自己可用的队属仓库作业也按先到先服务排队，只是不计日容量（S8）；False：自用仓完全不排队（GPT 第二批复算指出的旧实现）
 )
 
 
@@ -119,9 +120,11 @@ class Warehouse:
         self.veh = {}  # day -> 台次
         self.log = []  # (bid, unit, day, 台次)
 
-    def serve(self, bid, unit, arrive, c, queued=True):
-        """从 arrive 起服务 c 台次；返回 (开始, 结束)。queued=False 时不排队、不计容量（自己的队属仓库）。"""
+    def serve(self, bid, unit, arrive, c, queued=True, counted=None):
+        """从 arrive 起服务 c 台次；返回 (开始, 结束)。queued：是否按先到先服务排队（S9）；counted：是否计日容量（S8，默认同 queued）。"""
+        counted = queued if counted is None else counted
         queued = queued and not OPT["no_wh_cap"]
+        counted = counted and queued
         t = max(arrive, self.free_at) if queued else arrive
         d, h = t
         rem, start = float(c), None
@@ -131,11 +134,11 @@ class Warehouse:
         while rem > EPS:
             if h >= day_len - EPS:
                 d, h = d + 1, 0.0
-            room = (VEH_CAP - self.veh.get(d, 0.0)) if queued else float("inf")
+            room = (VEH_CAP - self.veh.get(d, 0.0)) if counted else float("inf")
             if room <= EPS:
                 d, h = d + 1, 0.0
                 continue
-            if queued:
+            if counted:
                 us = self.units.setdefault(d, set())
                 if unit not in us and len(us) >= UNIT_CAP:
                     d, h = d + 1, 0.0
@@ -146,7 +149,7 @@ class Warehouse:
             do = min(rem, (day_len - h) * RATE, room)
             h += do / RATE
             rem -= do
-            if queued:
+            if counted:
                 self.veh[d] = self.veh.get(d, 0.0) + do
                 self.log.append((bid, unit, d, do))
         end = (d, h) if h <= DAY_H + EPS else (d + 1, 0.0)  # 16:00 以后才做完：次日 8:00 才能动身
@@ -176,10 +179,11 @@ def simulate(plans: list, dist) -> tuple:
             s["moving_T"] += ceil_(sum(grp.values())) if grp else 0
         su, sl = sum(step.unload.values()), sum(step.load.values())
         cu, cl = (su, sl) if OPT["no_ceil"] else (ceil_(su), ceil_(sl))
-        queued = step.node.startswith("W") and step.node not in p.own_wh
+        counted = step.node.startswith("W") and step.node not in p.own_wh  # S8：自用队属仓不计日容量
+        queued = counted or (step.node.startswith("W") and OPT["own_queue"])  # S9：所有仓库先到先服务
         if cu + cl > 0:
             wh = whs.setdefault(step.node, Warehouse())
-            start, end = wh.serve(bid, p.unit, t, cu + cl, queued)
+            start, end = wh.serve(bid, p.unit, t, cu + cl, queued, counted)
         else:
             start = end = t
         for g in step.unload:

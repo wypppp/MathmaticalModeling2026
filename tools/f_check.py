@@ -299,9 +299,9 @@ def main():
                 V("S14", b, f"离开 {n} 时装载 {load_now:.3f} > 行驶车队 {movT} 辆")
             c = ceil_(su) + ceil_(sl)
             st["_c"], st["_su"], st["_sl"] = c, su, sl
-            queued = n.startswith("W") and n not in own
+            queued = n.startswith("W")  # S9：所有仓库先到先服务；S8 的日容量只算 H(x) 以外的仓库
             if c > 0 and queued:
-                services[n].append(st | dict(_b=b, _u=x, _idx=i))
+                services[n].append(st | dict(_b=b, _u=x, _idx=i, _own=n in own))
             if c > 0 and not queued:
                 # 自己的队属仓库：不排队，直接按工作时间推进
                 t, rem = st["arrive"], float(c)
@@ -335,15 +335,17 @@ def main():
                 if hours(t) >= 8 - 1e-6:
                     t = mk(day_of(t) + 1, 0, t.year)
                 d = day_of(t)
-                if s["_u"] not in units_day[d] and len(units_day[d]) >= 3:
-                    t = mk(d + 1, 0, t.year)
-                    continue
-                units_day[d].add(s["_u"])
+                if not s["_own"]:
+                    if s["_u"] not in units_day[d] and len(units_day[d]) >= 3:
+                        t = mk(d + 1, 0, t.year)
+                        continue
+                    units_day[d].add(s["_u"])
                 first = first or t
                 do = min(rem, (8 - hours(t)) * 2.5)
                 t += dt.timedelta(hours=do / 2.5)
                 rem -= do
-                veh_day[d] += do
+                if not s["_own"]:
+                    veh_day[d] += do
             free = t
             s["_end_q"], s["_first"] = t, first
             idle = day_of(first) - day_of(s["arrive"]) - 1 + (1 if hours(s["arrive"]) < 1e-6 and day_of(first) > day_of(s["arrive"]) else 0)
