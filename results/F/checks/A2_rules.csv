@@ -1,18 +1,18 @@
 ﻿读法,表列少于回放,表列多于回放,完全相等,回放总天数,表列总天数,绝对差之和,表列少于孤立最少天数,孤立最少天数之和,表列少于回放_回程不计,超载批次
-spec 默认,11,7,9,111,104,23,5,102,11,1
-split_legs,3,10,14,93,104,19,3,91,3,1
-split_long,7,9,11,104,104,20,5,97,7,1
-no_ceil,11,7,9,109,104,25,5,101,11,1
-load_anytime,6,8,13,102,104,20,3,93,6,1
-no_wh_cap,10,7,10,108,104,24,5,102,10,1
-split_legs+split_long,3,10,14,93,104,19,3,91,3,1
-split_legs+no_ceil,3,10,14,92,104,20,3,91,3,1
-split_legs+load_anytime,3,12,12,90,104,20,3,89,3,1
-split_legs+no_wh_cap,3,10,14,93,104,19,3,91,3,1
-split_long+no_ceil,7,10,10,101,104,23,5,96,7,1
-split_long+load_anytime,3,10,14,95,104,17,3,89,3,1
-split_long+no_wh_cap,7,9,11,101,104,21,5,97,7,1
-no_ceil+load_anytime,6,8,13,101,104,21,3,93,6,1
-no_ceil+no_wh_cap,10,7,10,108,104,24,5,101,10,1
-load_anytime+no_wh_cap,5,9,13,98,104,20,3,91,5,1
-split_legs+split_long+no_ceil+load_anytime+no_wh_cap,3,12,12,89,104,21,2,87,3,1
+spec 默认,11,7,9,111,104,23,7,105,11,1
+split_legs,3,10,14,93,104,19,3,93,3,1
+split_long,7,9,11,104,104,20,6,99,7,1
+no_ceil,11,7,9,109,104,25,7,104,11,1
+load_anytime,6,8,13,102,104,20,4,95,6,1
+no_wh_cap,10,7,10,108,104,24,7,105,10,1
+split_legs+split_long,3,10,14,93,104,19,3,93,3,1
+split_legs+no_ceil,3,10,14,92,104,20,3,92,3,1
+split_legs+load_anytime,3,12,12,90,104,20,3,90,3,1
+split_legs+no_wh_cap,3,10,14,93,104,19,3,93,3,1
+split_long+no_ceil,7,10,10,101,104,23,6,98,7,1
+split_long+load_anytime,3,10,14,95,104,17,3,90,3,1
+split_long+no_wh_cap,7,9,11,101,104,21,6,99,7,1
+no_ceil+load_anytime,6,8,13,101,104,21,4,95,6,1
+no_ceil+no_wh_cap,10,7,10,108,104,24,7,104,10,1
+load_anytime+no_wh_cap,5,9,13,98,104,20,4,93,5,1
+split_legs+split_long+no_ceil+load_anytime+no_wh_cap,3,12,12,89,104,21,2,88,3,1

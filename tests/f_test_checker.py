@@ -172,13 +172,26 @@ def case0(name, mutate):
     return ok
 
 
+def t_leave_partial(ws):
+    """在一个装了两行以上货的站，只把其中一行改为“留置”：件 7 注 7 要求当前已装车的全部车辆留下（【裁X2】），部分留置应报 S11。"""
+    rows = seg_rows(ws)
+    by = {}
+    for g in rows:
+        if g["io"] == "发":
+            by.setdefault((g["b"], g["node"], g["row"] // 1000), []).append(g)
+    for (b, n, _), gs in by.items():
+        if len(gs) >= 2 and all(ws.cell(g["row"], 12).value != "否" for g in gs):
+            ws.cell(gs[0]["row"], 12).value = "否"
+            return f"批 {b} 在 {n} 装的 {len(gs)} 行货中只把第 1 行改为留置"
+    raise RuntimeError("没有装两行以上货的站")
+
 if __name__ == "__main__":
     base = run(P3)
     assert "违例 0 条" in base, base
     print("原表：违例 0 条")
     res = [case("到达时刻 +10 分钟", "时刻", t_time), case("货量 +1", "守恒", t_qty), case("整批推迟 30 天", "S2", t_shift),
            case("代领改自领", "守恒", t_flag), case("S15 无关节点", "S15", t_s15), case("S10 留置 16:00 边界", "S10", t_s10),
-           case0("删去暂存/领回备注", t_nonote), case("R4 领回量对不上", "R3/R4", t_r4_pick), case("R5 代交改记他人", "R5", t_r5)]
+           case0("删去暂存/领回备注", t_nonote), case("R4 领回量对不上", "R3/R4", t_r4_pick), case("R5 代交改记他人", "R5", t_r5), case("留置改为部分随行", "S11", t_leave_partial)]
     print("未做篡改自检的新规则：S11 逆序汇合（现方案没有多站留置）、R5 先后（篡改需要挪动跨站的作业段）；"
           "包 3 第 1、3 条（代交晚装、留置+排队）在现方案上构造不出单点篡改，由 tools/pack3_probe.py 对每次结果探测。"
           "S12 前后两半、R4 整批先后已在旧方案（提交 928738d、2276c9b）的真实违例上被检查器报出。")
