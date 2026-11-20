@@ -65,10 +65,11 @@ def dump(tag, inst, sol, ev):
 REF25 = dict(l=(124, 12566.233135, 0.0), u=(134, 14412.883927, 5))  # J1 标尺：人裁 J1 时的下界与规则基线（R25），固定不随候选集变
 
 
-def search(inst, ref, log=print, multistart=True):
-    """基线 → 坐标下降 → 成对邻域；multistart 时再在 δ 最小的各出发日向量上做固定出发日多起点路线搜索，最后按 (合成分, V, 总里程) 打磨。"""
+def search(inst, ref, log=print, multistart=True, init=None):
+    """基线（或给定起点 init）→ 坐标下降 → 成对邻域；multistart 时再在 δ 最小的各出发日向量上做固定出发日多起点路线搜索，
+    最后按 (合成分, V, 总里程) 打磨。"""
     t1 = time.time()
-    base = inst.baseline()
+    base = inst.baseline() if init is None else dict(init)
     sol, best = inst.improve(base, ref)
     for rnd in range(5):
         sol, best, imp = inst.improve_pairs(sol, ref)
