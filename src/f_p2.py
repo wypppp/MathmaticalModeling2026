@@ -78,7 +78,7 @@ def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=N
 
 
 def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True,
-          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max", allow_R3=True, near_all=False):
+          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max", allow_R3=True, near_all=False, alternatives=0):
     """返回 dict(assign={块id: 选项}, stats=..., status=...)。forbid：若干选项集合，每个集合不得同时全选。
     fix_batches：把批次数固定为给定值（做折衷曲线时用）；此时 levels 中的 'B' 被跳过。"""
     m = gp.Model("p2")
@@ -198,7 +198,19 @@ def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, 
         else:
             m.addConstr(expr == round(val))
     assign = {kid: o for (kid, o), v in z.items() if v.X > 0.5}
-    return dict(status=gp.GRB.OPTIMAL, assign=assign, stats=stats, n_opts=sum(len(v) - 1 for v in opts.values()))
+    alts = []
+    if alternatives:
+        # 最优解唯一性诊断：字典序各级已固定为约束，对块指派 z 逐个加 no-good 割，找出同样最优的其他指派
+        m.setObjective(0)
+        cur = assign
+        for _ in range(alternatives):
+            m.addConstr(gp.quicksum(z[kid, o] for kid, o in cur.items()) <= len(cur) - 1)
+            m.optimize()
+            if m.Status != gp.GRB.OPTIMAL:
+                break
+            cur = {kid: o for (kid, o), v in z.items() if v.X > 0.5}
+            alts.append(cur)
+    return dict(status=gp.GRB.OPTIMAL, assign=assign, stats=stats, n_opts=sum(len(v) - 1 for v in opts.values()), alts=alts)
 
 
 def summarize(assign, batches, blocks, cap):
