@@ -45,8 +45,32 @@ def run3(assign, **kw):
     return inst, base, evb
 
 
+_MAIN = {}
+
+
+def main_init(inst):
+    """把问题 3 主方案（p3/batches_main.csv）按路线内容映射到实例 inst 上；全部批次都能映射且可行时返回，否则 None。
+    补充实验的变体从主方案出发搜索，避免因多起点向量数（MAX_VEC）少于主流程而系统性偏差。"""
+    if "steps" not in _MAIN:
+        m = f_p3.Instance(a3, batches, blocks, cap, D)
+        bm = pd.read_csv(ROOT / "results" / "F" / "p3" / "batches_main.csv")
+        _MAIN["steps"] = {int(r.batch): (m.cands[int(r.batch)][int(r.route)]["steps"], int(r.start)) for r in bm.itertuples()}
+    init = {}
+    for b in inst.ids:
+        if b not in _MAIN["steps"]:
+            return None
+        steps, day = _MAIN["steps"][b]
+        idx = [i for i, c in enumerate(inst.cands[b]) if c["steps"] == steps]
+        if not idx:
+            return None
+        init[b] = (idx[0], day)
+    return init if inst.evaluate(init)["feasible"] else None
+
+
 def q3_search(inst, ref, start=None):
-    """与问题 3 主流程相同的搜索；返回 (解, 回放结果)。"""
+    """与问题 3 主流程相同的搜索；返回 (解, 回放结果)。没给起点时，优先从主方案出发（能映射且可行），否则从规则基线出发。"""
+    if start is None:
+        start = main_init(inst)
     _, _, sol, ev = f_run_p3.search(inst, ref, log=lambda *x: None, init=start)
     return sol, ev
 
@@ -75,7 +99,7 @@ def p3_ablation():
             rows.append(dict(方案=tag, 可行=False))
             return
         ins, b, eb = r
-        start = b if eb["feasible"] else None
+        start = main_init(ins) or (b if eb["feasible"] else None)  # 优先从主方案出发
         if start is None:
             rows.append(dict(方案=tag, 可行=False, 说明="基线规则排不出"))
             return
@@ -212,7 +236,7 @@ def p3_rules():
         fe.OPT.update(opt)
         try:
             inst, base, evb = run3(a3)
-            ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+            ref = main_ref()  # spec v2.6 Y2：各读法变体也用同一把共用标尺（“其余不变”）
             sol, ev = q3_search(inst, ref)
         finally:
             fe.OPT.clear()
@@ -230,7 +254,7 @@ def p4_rules(opt=None):
     fe.OPT.update(opt)
     try:
         inst3, base, evb = run3(a3)
-        ref3 = dict(l=(inst3.lb_tau, inst3.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+        ref3 = main_ref()  # spec v2.6 Y2：各读法变体也用同一把共用标尺（“其余不变”）
         _, ev3 = q3_search(inst3, ref3)  # 问题 3 方案：全候选集 + 主流程搜索
         inst3p = f_p3.Instance(a3, batches, blocks, cap, D, prune=True)  # 问题 4 改派搜索的起点
         sol3, _ = inst3p.improve(inst3p.baseline(), ref3)
@@ -301,7 +325,7 @@ def p3_s12():
             continue
         base = inst.baseline()
         evb = inst.evaluate(base)
-        ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+        ref = main_ref()  # spec v2.6 Y2：各读法变体也用同一把共用标尺（“其余不变”）
         sol, _ = inst.improve(base, ref)
         ev = inst.evaluate(sol)
         rows.append(dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"], V=ev["V"],
@@ -320,7 +344,7 @@ def _p3_once(assign, tag, cand_filter=None):
     evb = inst.evaluate(base)
     if not evb["feasible"]:
         return dict(方案=tag, 可行=False, 说明="基线排不出")
-    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+    ref = main_ref()  # spec v2.6 Y2：各读法变体也用同一把共用标尺（“其余不变”）
     sol, ev = q3_search(inst, ref, base)
     return dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"],
                 基线_天=evb["tau"], 基线_km=evb["L"], 孤立下界_天=inst.lb_tau, 孤立下界_km=inst.lb_L)
