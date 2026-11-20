@@ -270,8 +270,58 @@ def merge():
     print(summ)
 
 
+def status():
+    """进度快照：已完成的前缀分片组 + 按向量分片的全部 .csv/.partial；只判定“分片齐全”或“按向量分片已写出”的向量。"""
+    import glob
+    import re
+    R, insts, pick, inc, ev, z, V = setup()
+    files = sorted(glob.glob(str(OUT / "part*of*.csv")) + glob.glob(str(OUT / "part*of*.partial")))
+    groups = defaultdict(list)
+    for f in files:
+        m = re.match(r"part(\d+)of(\d+)(.*)", Path(f).stem)
+        groups[(int(m.group(2)), m.group(3))].append((int(m.group(1)), f))
+    use = []
+    for (n, tag), lst in groups.items():
+        if tag.endswith("v"):
+            use += [f for _, f in lst]
+        elif sorted(k for k, f in lst if f.endswith(".csv")) == list(range(n)):
+            use += [f for _, f in lst]
+    df = pd.concat([pd.read_csv(f) for f in use]) if use else pd.DataFrame(columns=["tie", "vec"])
+    out = []
+    for t, inst in insts.items():
+        p = plan(inst, z)
+        for vi, v in enumerate(p["vecs"]):
+            dlt, budget, E, Vv = vec_params(inst, v, z, p["off"])
+            g = df[(df.tie == t) & (df.vec == vi)]
+            if g.empty:
+                out.append(dict(tie=t, delta=dlt, decided=False, best=None, n_sim=0))
+                continue
+            ncl = int(g.n_clusters.dropna().max()) if g.n_clusters.notna().any() else 0
+            tot = {0: 0.0}
+            for ci in range(ncl):
+                fr_ = {}
+                for r in g[(g.cluster == ci) & (g.status == "前沿")].itertuples():
+                    k = int(r.tex)
+                    fr_[k] = min(fr_.get(k, float("inf")), r.lex)
+                new = {}
+                for t1, l1 in tot.items():
+                    for t2, l2 in fr_.items():
+                        if t1 + t2 <= E and l1 + l2 < new.get(t1 + t2, float("inf")):
+                            new[t1 + t2] = l1 + l2
+                tot = new
+                if not tot:
+                    break
+            best = min((tt * c2.WT + ll * c2.WL + dlt * c2.WD + p["off"] for tt, ll in tot.items()), default=float("inf")) if E >= 0 else float("inf")
+            out.append(dict(tie=t, delta=dlt, decided=True, best=best, n_sim=int(g.n_sim.sum()), better=best < z - EPS or (abs(best - z) <= EPS and Vv < V)))
+    res = pd.DataFrame(out)
+    print(f"z* = {z:.6f}  V* = {V}")
+    print(res.groupby(["tie", "delta"]).agg(vectors=("decided", "size"), decided=("decided", "sum"), n_sim=("n_sim", "sum"),
+                                            better=("better", lambda x: int(x.fillna(False).sum())),
+                                            best=("best", lambda x: pd.to_numeric(x).min())).to_string())
+
+
 if __name__ == "__main__":
-    {"measure": measure, "merge": merge}.get(sys.argv[1], None) and {"measure": measure, "merge": merge}[sys.argv[1]]()
+    {"measure": measure, "merge": merge, "status": status}.get(sys.argv[1], lambda: None)()
     if sys.argv[1] == "run":
         a = sys.argv[2:]
         run(int(a[0]), int(a[1]), int(a[2]) if len(a) > 2 else None, int(a[3]) if len(a) > 3 else None, by_vec=len(a) > 4 and a[4] == "v")
