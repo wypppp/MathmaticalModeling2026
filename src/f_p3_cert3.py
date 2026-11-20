@@ -136,6 +136,8 @@ def cluster_front(inst, cl, days, cand, iv, mt, mL, E, budget, part, nparts):
                 return
         if k == len(cl):
             n_sim += 1
+            if n_sim % 200000 == 0:
+                print(f"  [part {part}] 簇 {len(cl)} 批 回放 {n_sim}  前沿 {len(front)}  {time.strftime('%H:%M:%S')}", flush=True)
             ev = f_p3._Sub(inst, sol).evaluate(sol)
             if not ev["feasible"] or any(ev["res"][b].end_day > iv[b][1] for b in cl):
                 return

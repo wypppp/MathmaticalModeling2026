@@ -1,5 +1,7 @@
 # 问题 2 并列最优：A 版（维持现主解）与 B 版（换替代解 1）并排
 
+> **已被取代（2026-11-20）**：人已裁决选 B，并改用共用标尺（spec v2.6，Y1/Y2）。本文件的数字是裁决前的 A/B 比较，B 版的“偏离分母 1/5”两种标尺都已废弃；现行结果见 `results/F/p3/ties.csv`、`p3/choice.csv` 与正文第七、八章。
+
 > 写给人裁决用（V38）。整理者 Claude，是当事方。数字全部来自 `results/F/p2/alternatives.csv`、`results/F/p2_alt/*`、`results/F/p3/summary.csv`、`results/F/p4/summary.csv`。
 > 两版的问题 2、问题 3 方案都经独立检查器 0 违例。B 版还没有经过第二方复核。
 
