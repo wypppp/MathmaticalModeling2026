@@ -108,8 +108,10 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
     s = {g: groups[g].s for g in gids}
     res = []
     own_set = set(fb.H[unit])
-    # S12：含自有块、从可用队属仓库装车送往外面的货组，须在到访任何外部仓库作业之前装车
-    own_send = {g for g in gids if groups[g].load in own_set and groups[g].unload not in own_set and any(r == "own" for _, r in groups[g].parts)}
+    # S12：从可用队属仓库装车送往外面的上交货组（自有送交，以及 R6 / 反转的代交；Gemini 包 3 第 1 条，件 7/8 注 2
+    # “有上交时第一个为队属货物仓库”），须在到访任何外部仓库作业之前装车
+    own_send = {g for g in gids if groups[g].load in own_set and groups[g].unload not in own_set
+                and any(r in ("own", "代交") for _, r in groups[g].parts)}
     # S15：允许途经的站点集合及其上的最短路
     nodes = sorted({unit} | set(fb.H[unit]) | {g.load for g in groups.values()} | {g.unload for g in groups.values()})
     dc = {(a, b): (0.0 if a == b else float(D.at[a, b])) for a in nodes for b in nodes}
@@ -195,6 +197,13 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
     return res
 
 
+def leave_idle(left_end_day, lg):
+    """S10：留置车的整日闲置天数 = 留置结束日之后、到汇合站重新开工（无作业时为离开）之前，整天既不作业也不行驶的天数。
+    汇合后排队的时间也算在内（Gemini 包 3 第 3 条：原先只算到汇合车队到达）；重新开工恰在 16:00 及以后时当天也算闲置。"""
+    t = lg.start if (lg.c_unload + lg.c_load) > 0 else lg.depart
+    return t[0] - left_end_day - 1 + (1 if t[1] >= fe.DAY_H - 1e-9 else 0)
+
+
 def evaluate(bid, unit, T, steps, D, start_day=10):
     """孤立回放一条路线；返回 dict(D, Lbar, veh_km, tau, ok, res)。ok=False 表示违反 S10（留置整日闲置 > 1 天）或引擎报错。"""
     plan = fe.Plan(bid, unit, start_day, T, steps, tuple(fb.H[unit]))
@@ -203,8 +212,7 @@ def evaluate(bid, unit, T, steps, D, start_day=10):
     left_at = {}
     for st, lg in zip(steps, r.logs):
         if st.rejoin and st.node in left_at:
-            # S10：留置车整日闲置天数；汇合车队 16:00 才到时，当天也算闲置
-            if LEAVE_WAIT_LIMIT and lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
+            if LEAVE_WAIT_LIMIT and leave_idle(left_at.pop(st.node), lg) > 1:
                 ok = False
         if st.leave:
             left_at[st.node] = lg.end[0]

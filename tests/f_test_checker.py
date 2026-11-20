@@ -118,12 +118,68 @@ def t_flag(ws):
     raise RuntimeError
 
 
+def seg_rows(ws):
+    """[(行, 批次, 单位, 节点, 收发, 代领交, 被代单位, 备注列)]，节点沿用所属的站。"""
+    out, b, u, n, io = [], None, None, None, None
+    for r in ws.iter_rows(min_row=2, max_col=14):
+        if r[0].value is not None:
+            b, u = r[0].value, r[2].value
+        if r[3].value is not None:
+            n = r[3].value
+        if r[5].value is not None:
+            io = r[5].value
+            out.append(dict(row=r[5].row, b=b, u=u, node=n, io=io, flag=r[8].value, who=r[9].value, note=r[13]))
+    return out
+
+
+def t_nonote(ws):
+    n = 0
+    for r in ws.iter_rows(min_row=2, max_col=14):
+        if isinstance(r[13].value, str) and ("暂存" in r[13].value or "领回" in r[13].value):
+            r[13].value = None
+            n += 1
+    return f"删去 {n} 处“暂存/领回”备注（R4 判定不应依赖备注）"
+
+
+def t_r4_pick(ws):
+    for g in seg_rows(ws):
+        if g["flag"] == 0 and g["io"] == "发" and isinstance(g["note"].value, str) and "领回" in g["note"].value:
+            q = ws.cell(g["row"], 8)
+            if isinstance(q.value, (int, float)):
+                q.value = q.value + 1
+                return f"批 {g['b']} 在 {g['node']} 领回暂存货的数量 +1（找不到对应的暂存，且货主驻地 > 150 km）"
+    raise RuntimeError("没有领回")
+
+
+def t_r5(ws):
+    for g in seg_rows(ws):
+        if g["flag"] == -1 and g["io"] == "发" and g["node"] not in H[g["u"]]:
+            other = next(u for u in ("U9", "U7", "U1") if u not in (g["who"], g["u"]))
+            ws.cell(g["row"], 10).value = other
+            return f"批 {g['b']} 在 {g['node']} 替 {g['who']} 装的代交货改记为替 {other}（R5 失去同一货主的配对代交）"
+    raise RuntimeError("没有外部代交")
+
+
+def case0(name, mutate):
+    """篡改后检查器应仍报 0 条（稳健性）。"""
+    tmp = Path(tempfile.mkdtemp()) / "p3.xlsx"
+    shutil.copy(P3, tmp)
+    wb = openpyxl.load_workbook(tmp)
+    desc = mutate(wb.worksheets[0])
+    wb.save(tmp)
+    ok = "违例 0 条" in run(tmp)
+    print(("通过" if ok else "失败"), name, "|", desc)
+    return ok
+
+
 if __name__ == "__main__":
     base = run(P3)
     assert "违例 0 条" in base, base
     print("原表：违例 0 条")
     res = [case("到达时刻 +10 分钟", "时刻", t_time), case("货量 +1", "守恒", t_qty), case("整批推迟 30 天", "S2", t_shift),
-           case("代领改自领", "守恒", t_flag), case("S15 无关节点", "S15", t_s15), case("S10 留置 16:00 边界", "S10", t_s10)]
-    print("未做篡改自检的新规则：S11 逆序汇合（现方案没有多站留置）、R5 先后（篡改需要挪动跨站的作业段）。"
+           case("代领改自领", "守恒", t_flag), case("S15 无关节点", "S15", t_s15), case("S10 留置 16:00 边界", "S10", t_s10),
+           case0("删去暂存/领回备注", t_nonote), case("R4 领回量对不上", "R3/R4", t_r4_pick), case("R5 代交改记他人", "R5", t_r5)]
+    print("未做篡改自检的新规则：S11 逆序汇合（现方案没有多站留置）、R5 先后（篡改需要挪动跨站的作业段）；"
+          "包 3 第 1、3 条（代交晚装、留置+排队）在现方案上构造不出单点篡改，由 tools/pack3_probe.py 对每次结果探测。"
           "S12 前后两半、R4 整批先后已在旧方案（提交 928738d、2276c9b）的真实违例上被检查器报出。")
     sys.exit(0 if all(res) else 1)

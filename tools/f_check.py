@@ -193,6 +193,8 @@ def main():
     flowHR = defaultdict(float)
     A_tot = 0.0
     stage_un, stage_ld = {}, {}  # R4：(属主, 货物, 仓库) -> 时间
+    dl_own = []  # 包 3 第 8 条：(属主, 货物, 数量, 卸货的队属仓库, 批次, 站)，不依赖备注
+    own_ld = defaultdict(list)  # (单位, 货物, 节点, 数量) -> [(到达时刻, 批次, 站序)]：在别人的队属仓库装自有货
     for bt in P3:
         b, x = bt["id"], bt["unit"]
         T = P2.get(b, {}).get("T")
@@ -211,6 +213,7 @@ def main():
         first_ext = None  # S12：第一个有作业的外部仓库的站序
         back_at = None  # S12 后半：第一次把外面装来的货卸进自己队属仓库的站序
         dj_load = defaultdict(list)  # R5：(属主, 节点) -> 代交货装车的站序
+        dl_ext = []  # (属主, 货物, 卸货节点, 装车站序)
         act_nodes = {x} | own | {s_["node"] for s_ in bt["stops"] if s_["segs"]}
         for i, st in enumerate(bt["stops"]):
             n = st["node"]
@@ -218,7 +221,7 @@ def main():
                 V("S15", b, f"第 {i} 站经过与本批无关的节点 {n}")
             if first_ext is None and n.startswith("W") and n not in own and st["segs"]:
                 first_ext = i
-            if back_at is not None and n.startswith("W") and n not in own and st["segs"]:
+            if back_at is not None and n.startswith("W") and n not in own and (st["segs"] or n in left):  # 包 3 第 2.2 条：纯汇合也算
                 V("S12", b, f"第 {back_at} 站已把接领的货卸进队属仓库，第 {i} 站又在外部仓库 {n} 作业")
             d = D[(pos, n)] if pos != n else 0.0
             if i == 0:
@@ -235,7 +238,7 @@ def main():
             for g in onboard:
                 g[4] += d
             pos = n
-            if n in left and not any(sg["follow"] == "否" for sg in st["segs"]):
+            if n in left:  # 包 3 第 9 条：先汇合，同站再次留置不覆盖旧记录
                 if n != list(left)[-1]:
                     V("S11", b, f"在 {n} 汇合，但最近一次留置在 {list(left)[-1]}（应按相反顺序汇合）")
                 grp = left.pop(n)
@@ -259,6 +262,8 @@ def main():
                         if sg["flag"] == -1:
                             dj_load[(owner, n)].append(i)
                         (new_left if sg["follow"] == "否" else onboard).append(row)
+                        if n in TEAM and n not in own and sg["flag"] == 0:
+                            own_ld[(x, it, n, q)].append((st["arrive"], b, i))
                         if n in TEAM and n not in own and sg["flag"] == 0 and "领回" in sg["note"]:
                             stage_ld[(owner, it, n, q)] = (st["arrive"], b)
                     else:
@@ -272,10 +277,12 @@ def main():
                         done.append(hit)
                         if back_at is None and n in own and hit[5] not in own:
                             back_at = i
-                        if hit[6] == 0 and hit[5] in own and n not in own and first_ext is not None and hit[8] > first_ext:
-                            V("S12", b, f"自有送交货 {it} 在第 {hit[8]} 站（{hit[5]}）才装车，第 {first_ext} 站已在外部仓库作业")
-                        if hit[6] == 1 and n in TEAM and n not in own and dj_load.get((owner, n)) and hit[8] < min(dj_load[(owner, n)]):
-                            V("R5先后", b, f"代 {owner} 领的 {it} 在第 {hit[8]} 站装车，早于在 {n} 装代交货（第 {min(dj_load[(owner, n)])} 站）")
+                        if hit[6] in (0, -1) and hit[5] in own and n not in own and first_ext is not None and hit[8] > first_ext:
+                            V("S12", b, f"从队属仓库上交的货 {it}（{'自有' if hit[6] == 0 else '代交'}）在第 {hit[8]} 站（{hit[5]}）才装车，第 {first_ext} 站已在外部仓库作业")
+                        if hit[6] == 1 and n not in own:
+                            dl_ext.append((owner, it, n, hit[8]))  # 包 3 第 7 条：卸到外部的代领货，读完整批后按 R2 / R5 判定
+                        if hit[6] == 1 and n in own and n not in H.get(owner, []):
+                            dl_own.append((owner, it, q, n, b, st))  # 包 3 第 8 条：卸进自己队属仓库的代领货，只能是 R3 或 R4
                         if sg["flag"] != 0:
                             A_tot += e1
                             flowHR[(x, owner)] += e1
@@ -322,6 +329,14 @@ def main():
         if pos != x:
             V("S12", b, "最后一站不是驻地")
         bt.update(_T=T, _D=Dtot, _done=done, _targets=targets, _special=special - targets, _recv=recv, _send=send, _start=start_day)
+        # 包 3 第 7 条：卸到外部队属仓库的代领货——该仓库是本批目标仓库即 R2；否则只能是 R5，须同时替同一货主从该仓库代交、且先装代交货
+        for owner, it, n, ld_i in dl_ext:
+            if n in targets:
+                continue
+            if not dj_load.get((owner, n)):
+                V("R5", b, f"代 {owner} 领的 {it} 卸到 {n}：{n} 不是本批目标仓库（非 R2），本批也没有替 {owner} 从 {n} 出发的代交（非 R5）")
+            elif ld_i < min(dj_load[(owner, n)]):
+                V("R5先后", b, f"代 {owner} 领的 {it} 在第 {ld_i} 站装车，早于在 {n} 装代交货（第 {min(dj_load[(owner, n)])} 站）")
 
     # ---- 排队仓库：按到达时刻先到先服务（独立实现），算出每次作业的结束时刻
     for w, lst in services.items():
@@ -357,6 +372,7 @@ def main():
             if len(units_day[d]) > 3:
                 V("S8", None, f"{w} 第 {d} 天 {len(units_day[d])} 支单位")
     endq = {(s["_b"], s["_idx"]): s["_end_q"] for lst in services.values() for s in lst}
+    firstq = {(s["_b"], s["_idx"]): s["_first"] for lst in services.values() for s in lst}
 
     # ---- 用排队结果复核每批后续时刻、天数、等待、时间窗
     tau_sum = delta_sum = D_sum = L_sum = vk_sum = 0.0
@@ -371,6 +387,7 @@ def main():
         left_day = {}
         for i, st in enumerate(stops):
             end = endq.get((b, i), st.get("_end"))
+            exp_dep = end
             if i + 1 < len(stops):
                 nx = stops[i + 1]
                 d = D[(st["node"], nx["node"])] if st["node"] != nx["node"] else 0.0
@@ -379,10 +396,14 @@ def main():
                     V("离开时刻", b, f"{st['node']} 应于 {exp_dep:%m/%d %H:%M} 离开，表中 {st['depart']:%m/%d %H:%M}")
                 if abs(exp_arr - nx["arrive"]) > TOL:
                     V("时刻", b, f"{st['node']}→{nx['node']}：作业应于 {end:%m/%d %H:%M} 结束，应到 {exp_arr:%m/%d %H:%M}，表中 {nx['arrive']:%m/%d %H:%M}")
+            if st["node"] in left_day:
+                # 包 3 第 3 条：留置车闲置到汇合站重新开工（排队也算），无作业时到离开
+                resume = firstq.get((b, i)) if st.get("_c", 0) > 0 else exp_dep  # 无作业时用按规则推算的离开时刻（不信表中的离开时刻）
+                resume = max(resume or st["arrive"], st["arrive"])
+                if day_of(resume) - left_day.pop(st["node"]) - 1 + (1 if hours(resume) >= 8 - 1e-6 else 0) > 1:
+                    V("S10", b, f"留置在 {st['node']} 的车整日等待超过 1 天（算到汇合后重新开工）")
             if any(sg["follow"] == "否" for sg in st["segs"]):
                 left_day[st["node"]] = day_of(end)
-            elif st["node"] in left_day and day_of(st["arrive"]) - left_day.pop(st["node"]) - 1 + (1 if hours(st["arrive"]) >= 8 - 1e-6 else 0) > 1:
-                V("S10", b, f"留置在 {st['node']} 的车整日等待超过 1 天")
         s_day, e_day = bt["_start"], day_of(stops[-1]["arrive"])
         if e_day > 91 or s_day < 1:
             V("S1", b, "超出 4/1–6/30")
@@ -447,6 +468,26 @@ def main():
         bb = {bt["id"]: bt for bt in P3}
         if bb[b2]["_start"] <= bb[b1].get("_e_day", 0):  # 【裁U2】整批先后：货主批次出发日 > 暂存批次回驻地日
             V("R4整批", b2, f"货主批次 {b2} 出发日 {bb[b2]['_start']} 不晚于暂存批次 {b1} 回驻地日 {bb[b1].get('_e_day')}")
+
+    # ---- 包 3 第 8 条：卸进执行方队属仓库的代领货，只能是 R3（货主驻地 ≤150 km、自取）或 R4（货主后续批次来领），不看备注
+    bb = {bt["id"]: bt for bt in P3}
+    for owner, it, q, n, b1, st in dl_own:
+        picks = [(t, b2, i2) for (t, b2, i2) in own_ld.get((owner, it, n, q), []) if b2 != b1]
+        if not picks:
+            if D[(owner, n)] > 150 + 1e-9:
+                V("R3/R4", b1, f"代 {owner} 领的 {it}×{q} 卸在 {n}：没有 {owner} 的批次来领（非 R4），{owner} 驻地距 {n} {D[(owner, n)]:.0f} km > 150（非 R3）")
+            continue
+        t_ld, b2, i2 = min(picks)
+        t_un = endq.get((b1, st["_idx"]), st.get("_end"))
+        if t_un is not None and t_ld < t_un - TOL:
+            V("R4", b2, f"{owner} 在 {n} 领回 {it} 的到达时刻早于批 {b1} 卸完")
+        if bb[b2]["_start"] <= bb[b1].get("_e_day", 0):
+            V("R4整批", b2, f"货主批次 {b2} 出发日 {bb[b2]['_start']} 不晚于暂存批次 {b1} 回驻地日 {bb[b1].get('_e_day')}")
+        staged = {(o_, it_, n_, q_) for o_, it_, q_, n_, _, _ in dl_own}
+        own_ops = [(it_, q_) for st2 in bb[b2]["stops"] if st2["node"] == n for sg in st2["segs"] if sg["flag"] == 0
+                   for it_, q_ in sg["items"] if (owner, it_, n, q_) not in staged]  # 货主批次在 n 的自有作业（不含领回暂存货）
+        if not own_ops:
+            V("R4", b2, f"暂存仓 {n} 不是货主批次 {b2} 本来就要作业的仓库（h_x ∉ W_β′^own）")
 
     # ---- 守恒：每个 (属主, 货物) 在各节点的净流出与附件 4 的需求一致（R3 的落仓允许 ≤150 km 的替代仓库）
     need = defaultdict(lambda: defaultdict(float))
