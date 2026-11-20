@@ -87,6 +87,14 @@ ends = p4[p4["方案"].str.startswith("搜索终点")]["合成分"]
 put("P4.search.score_min", float(ends.min()), "p4/summary.csv", "R39", STATUS_P34, f"{len(ends)} 次搜索终点")
 put("P4.search.score_max", float(ends.max()), "p4/summary.csv", "R39", STATUS_P34)
 
+gp = pd.read_csv(R / "p3/gap_decomp.csv").set_index("batch")
+put("P3.gap.n_both_min", int(((gp.extra_tau == 0) & (gp.extra_L < 1e-6)).sum()), "p3/gap_decomp.csv", "R44", STATUS_P34, "tools/p3_gap.py")
+put("P3.gap.extra_tau", int(gp.extra_tau.sum()), "p3/gap_decomp.csv", "R44", STATUS_P34)
+put("P3.gap.b7.L_saved", gp.at[7, "L_saved_vs_min_tau_route"], "p3/gap_decomp.csv", "R44", STATUS_P34, "批 7 比其最少天数路线少的载货距离")
+put("P3.gap.b13.extra_L", gp.at[13, "extra_L"], "p3/gap_decomp.csv", "R44", STATUS_P34)
+put("P3.gap.b13.tau_at_min_L", int(gp.at[13, "tau_at_min_Lbar"]), "p3/gap_decomp.csv", "R44", STATUS_P34)
+put("P3.gap.b1_30_32.extra_L", float(gp.loc[[1, 30, 32], "extra_L"].sum()), "p3/gap_decomp.csv", "R44", STATUS_P34)
+
 ab = pd.read_csv(R / "extra/p3_ablation.csv").set_index("方案")
 for row, tag in [("关闭留置", "noleave"), ("关闭途经（每段只走直达）", "nopass"), ("关闭留置和途经", "none"), ("不允许提前出发", "noearly"),
                  ("合成方式：先比最差项", "minimax"), ("合成方式：权重 0.4/0.4/0.2", "w442")]:

@@ -158,6 +158,12 @@ P4.main.V,20,p4/summary.csv,R39,B,
 P4.main.score,1.477187,p4/summary.csv,R39,B,
 P4.search.score_min,1.477187,p4/summary.csv,R39,B,12 次搜索终点
 P4.search.score_max,1.801107,p4/summary.csv,R39,B,
+P3.gap.n_both_min,25,p3/gap_decomp.csv,R44,B,tools/p3_gap.py
+P3.gap.extra_tau,4,p3/gap_decomp.csv,R44,B,
+P3.gap.b7.L_saved,623.669578,p3/gap_decomp.csv,R44,B,批 7 比其最少天数路线少的载货距离
+P3.gap.b13.extra_L,33.927487,p3/gap_decomp.csv,R44,B,
+P3.gap.b13.tau_at_min_L,8,p3/gap_decomp.csv,R44,B,
+P3.gap.b1_30_32.extra_L,6.890226,p3/gap_decomp.csv,R44,B,
 X.ablation.noleave.tau,131,extra/p3_ablation.csv,R44,C,
 X.ablation.noleave.L,13255.950268,extra/p3_ablation.csv,R44,C,
 X.ablation.noleave.delta,1,extra/p3_ablation.csv,R44,C,
