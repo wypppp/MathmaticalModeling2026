@@ -62,6 +62,37 @@ def dump(tag, inst, sol, ev):
     pd.DataFrame(wl).to_csv(OUT / f"wh_load_{tag}.csv", index=False, encoding="utf-8-sig")
 
 
+REF25 = dict(l=(124, 12566.233135, 0.0), u=(134, 14412.883927, 5))  # J1 标尺：人裁 J1 时的下界与规则基线（R25），固定不随候选集变
+
+
+def search(inst, ref, log=print, multistart=True):
+    """基线 → 坐标下降 → 成对邻域；multistart 时再在 δ 最小的各出发日向量上做固定出发日多起点路线搜索，最后按 (合成分, V, 总里程) 打磨。"""
+    t1 = time.time()
+    base = inst.baseline()
+    sol, best = inst.improve(base, ref)
+    for rnd in range(5):
+        sol, best, imp = inst.improve_pairs(sol, ref)
+        log(f"  成对邻域第 {rnd + 1} 轮 合成分 {best[0]:.6f} V={best[1]} 改进={imp} {time.time() - t1:.1f}s")
+        if not imp:
+            break
+        sol, best = inst.improve(sol, ref)
+    ev1 = inst.evaluate(sol)
+    if not multistart:
+        return base, ev1, sol, ev1
+    import f_p3_cert2 as c2
+    vecs, complete, _ = c2.day_vectors(inst, dmax=ev1["delta"])
+    pool = [(f_p3.key3(inst, ev1, ref), sol)]
+    for vi, v in enumerate(vecs):
+        s2, k2 = f_p3.fixed_day_search(inst, ref, v, 30, seed=vi, init=sol)
+        log(f"  出发日向量 {vi}（δ≤{ev1['delta']}，共 {len(vecs)} 个，完整={complete}）多起点最好 {k2}  {time.time() - t1:.1f}s")
+        if s2 is not None:
+            pool.append((k2, s2))
+    sol = min(pool, key=lambda x: x[0])[1]
+    sol, k = f_p3.polish(inst, sol, ref)
+    log(f"  打磨后 {k}  {time.time() - t1:.1f}s")
+    return base, ev1, sol, inst.evaluate(sol)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     cap, D = fp.load_cap(), fp.load_dist()
@@ -69,27 +100,26 @@ def main():
     assign = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
     t0 = time.time()
     inst = f_p3.Instance(assign, batches, blocks, cap, D)
-    print(f"实例：{len(inst.ids)} 批，候选路线 {sum(len(v) for v in inst.cands.values())} 条，下界 tau≥{inst.lb_tau} L≥{inst.lb_L:.3f}，建模 {time.time() - t0:.1f}s")
-    base = inst.baseline()
-    evb = inst.evaluate(base)
+    print(f"实例：{len(inst.ids)} 批，全部候选路线 {sum(len(v) for v in inst.cands.values())} 条（帕累托子集 {sum(len(v) for v in inst.pareto.values())} 条），"
+          f"下界 tau≥{inst.lb_tau} L≥{inst.lb_L:.3f}，建模 {time.time() - t0:.1f}s")
+    base0 = inst.baseline()
+    evb = inst.evaluate(base0)
     print("基线", evb["feasible"], evb["viol"], dict(tau=evb["tau"], L=round(evb["L"], 3), delta=evb["delta"], V=evb["V"], D=evb["D"]))
-    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
-    t1 = time.time()
-    sol, best = inst.improve(base, ref, log=lambda s, b: print(f"  第 {s + 1} 轮 合成分 {b[0]:.6f} V={b[1]}"))
-    ev1 = inst.evaluate(sol)
-    print("坐标下降后", dict(tau=ev1["tau"], L=round(ev1["L"], 3), delta=ev1["delta"], V=ev1["V"]), f"{time.time() - t1:.1f}s")
-    for rnd in range(5):
-        sol, best, imp = inst.improve_pairs(sol, ref)
-        print(f"  成对邻域第 {rnd + 1} 轮 合成分 {best[0]:.6f} V={best[1]} 改进={imp} {time.time() - t1:.1f}s")
-        if not imp:
-            break
-        sol, best = inst.improve(sol, ref)
-    ev = inst.evaluate(sol)
-    print("主路线", ev["feasible"], ev["viol"], dict(tau=ev["tau"], L=round(ev["L"], 3), delta=ev["delta"], V=ev["V"], D=ev["D"]), f"{time.time() - t1:.1f}s")
+    calc = (inst.lb_tau, inst.lb_L, evb["tau"], evb["L"], evb["delta"])
+    pin = (REF25["l"][0], REF25["l"][1], REF25["u"][0], REF25["u"][1], REF25["u"][2])
+    if any(abs(a - b) > 1e-5 for a, b in zip(calc, pin)):
+        print(f"【报警】本次下界/基线 {calc} 与 J1 标尺 {pin} 不同；标尺仍用 R25 的值")
+    ref = REF25
+    base, ev1, sol, ev = search(inst, ref)
+    print("主路线", ev["feasible"], ev["viol"], dict(tau=ev["tau"], L=round(ev["L"], 3), delta=ev["delta"], V=ev["V"], D=ev["D"]), f"{time.time() - t0:.1f}s")
+    # 消融：R25 的做法（帕累托剪枝候选、不做多起点）
+    instp = f_p3.Instance(assign, batches, blocks, cap, D, prune=True)
+    _, _, solp, evp = search(instp, ref, log=lambda *_: None, multistart=False)
+    print("消融（剪枝候选，R25 做法）", dict(tau=evp["tau"], L=round(evp["L"], 3), delta=evp["delta"], V=evp["V"], D=evp["D"]))
     dump("baseline", inst, base, evb)
     dump("main", inst, sol, ev)
     summ = [dict(name="下界（各批孤立最优）", tau=inst.lb_tau, L=inst.lb_L, delta=0, V=None, D=None, veh_km=None, score=0.0)]
-    for name, e in (("基线", evb), ("坐标下降", ev1), ("主路线（加成对邻域）", ev)):
+    for name, e in (("基线", evb), ("坐标下降+成对邻域", ev1), ("主路线（加多起点与打磨）", ev), ("消融：剪枝候选（R25 做法）", evp)):
         summ.append(dict(name=name, tau=e["tau"], L=e["L"], delta=e["delta"], V=e["V"], D=e["D"], veh_km=e["veh_km"], score=inst.score(e, ref)[0], feasible=e["feasible"]))
     pd.DataFrame(summ).to_csv(OUT / "summary.csv", index=False, encoding="utf-8-sig")
     # 结果表：附件 6（问题 2）与附件 7（问题 3）用同一套新批次号

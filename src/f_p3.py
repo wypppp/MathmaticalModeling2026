@@ -18,23 +18,25 @@ R4_RULE = "batch"  # 【裁U2】batch = β′ 出发日晚于 β 回驻地日（
 
 
 class Instance:
-    def __init__(self, assign, batches, blocks, cap, D, cache=None, cand_filter=None, early=6, agg="sum"):
+    def __init__(self, assign, batches, blocks, cap, D, cache=None, cand_filter=None, early=6, agg="sum", prune=False):
         """cand_filter：对候选路线的过滤（消融用；与 cache 同用时须为每种过滤单独建 cache）。early：最多可提前的天数。
-        agg：三项的合成方式，"sum" 等权和 / "minimax" 先比最差项再比总和 / (w1,w2,w3) 加权和。"""
-        self.early, self.agg = early, agg
+        agg：三项的合成方式，"sum" 等权和 / "minimax" 先比最差项再比总和 / (w1,w2,w3) 加权和。
+        prune：True 时按孤立 (τ, L̄, D) 帕累托剪枝（R25 及以前的做法，消融用）；默认 False 保留全部可行路线——
+        D 不在目标里，排队下被 D 支配的路线也可能更好（evidence R31）。self.pareto[b] 记录帕累托子集的下标（成对邻域用）。"""
+        self.early, self.agg, self.prune = early, agg, prune
         self.assign, self.batches, self.blocks, self.cap, self.D = assign, batches, blocks, cap, D
         self.groups = fr.batch_groups(assign, batches, blocks, cap)
         self.ids = sorted(self.groups)
-        self.T, self.cands, self.base_idx = {}, {}, {}
+        self.T, self.cands, self.base_idx, self.pareto = {}, {}, {}, {}
         for b in self.ids:
             u = batches[b].unit
             T = fr.batch_T(self.groups[b], u)[0]
             self.T[b] = T
-            sig = (b, T, tuple(sorted((g.gid, round(g.s, 9)) for g in self.groups[b].values())))
+            sig = (b, T, tuple(sorted((g.gid, round(g.s, 9)) for g in self.groups[b].values())), prune)
             self.sig = getattr(self, "sig", {})
             self.sig[b] = sig
             if cache is not None and sig in cache:
-                self.cands[b], self.base_idx[b] = cache[sig]
+                self.cands[b], self.base_idx[b], self.pareto[b] = cache[sig]
                 continue
             allr = []
             for steps in fr.enumerate_routes(u, T, self.groups[b], D):
@@ -51,8 +53,8 @@ class Instance:
                 allr = [e for e in allr if cand_filter(e)]
             if not allr:
                 if cache is not None:
-                    cache[sig] = ([], -1)
-                self.cands[b], self.base_idx[b] = [], -1
+                    cache[sig] = ([], -1, [])
+                self.cands[b], self.base_idx[b], self.pareto[b] = [], -1, []
                 continue
             simple = [e for e in allr if e["n_leave"] == 0 and e["n_pass"] == 0 and e["n_revisit"] == 0]
             base = min(simple or allr, key=lambda e: (e["D"], e["tau"], e["Lbar"]))
@@ -64,10 +66,11 @@ class Instance:
                         nd.append(a)
             if base not in nd:
                 nd.append(base)
-            self.cands[b] = nd
-            self.base_idx[b] = nd.index(base)
+            self.cands[b] = nd if prune else allr
+            self.base_idx[b] = self.cands[b].index(base)
+            self.pareto[b] = [self.cands[b].index(a) for a in nd]
             if cache is not None:
-                cache[sig] = (nd, self.base_idx[b])
+                cache[sig] = (self.cands[b], self.base_idx[b], self.pareto[b])
         self.routable = all(self.cands[b] for b in self.ids)
         if not self.routable:
             return
@@ -243,9 +246,12 @@ def _improve_pairs(self, sol, ref, log=None):
             if not (((whs[b1] & whs[b2]) or self.batches[b1].unit == self.batches[b2].unit) and near or (b1, b2) in link):
                 continue
             k1, k2 = sol[b1], sol[b2]
-            for r1 in range(len(self.cands[b1])):
+            # 全候选集上成对枚举组合数过大：路线只取帕累托子集（加上当前路线），出发日全试
+            R1 = sorted(set(self.pareto[b1]) | {sol[b1][0]})
+            R2 = sorted(set(self.pareto[b2]) | {sol[b2][0]})
+            for r1 in R1:
                 for d1 in range(w1[0], w1[1] + 1):
-                    for r2 in range(len(self.cands[b2])):
+                    for r2 in R2:
                         for d2 in range(w2[0], w2[1] + 1):
                             if (r1, d1) == sol[b1] or (r2, d2) == sol[b2]:
                                 continue  # 单批改动已由坐标下降覆盖
@@ -277,3 +283,70 @@ class _Sub:
     evaluate = Instance.evaluate
     plans = Instance.plans
     window = Instance.window
+
+
+# ---------- 全候选集上的补充搜索（R33 起）----------
+def key3(inst, ev, ref):
+    """最终比较键：(合成分, V, 总里程)。总里程是人裁之前的默认第三级（evidence R31：同分同 V 的方案总里程不同）。"""
+    sc, V = inst.score(ev, ref)
+    return (round(sc, 12), V, ev["D"])
+
+
+def fixed_day_search(inst, ref, days, starts, seed=0, sweeps=6, slack=3, init=None):
+    """固定出发日、只换路线的坐标下降，多起点。起点 0 = init 的路线（若给），其余随机（孤立 τ ≤ 最少 + slack）。返回 (最好解, 键)。"""
+    import random as _r
+    rng = _r.Random(seed)
+    mt = {b: min(c["tau"] for c in inst.cands[b]) for b in inst.ids}
+    ok_r = {b: [i for i, c in enumerate(inst.cands[b]) if c["tau"] <= mt[b] + slack] for b in inst.ids}
+    best, best_k = None, (float("inf"),)
+    for s in range(starts):
+        if s == 0 and init is not None:
+            sol = {b: (init[b][0], days[b]) for b in inst.ids}
+        else:
+            sol = {b: (rng.choice(ok_r[b]), days[b]) for b in inst.ids}
+        ev = inst.evaluate(sol)
+        cur = key3(inst, ev, ref) if ev["feasible"] else (float("inf"),)
+        for _ in range(sweeps):
+            changed = False
+            for b in inst.ids:
+                keep = sol[b]
+                for ri in ok_r[b]:
+                    if ri == keep[0]:
+                        continue
+                    sol[b] = (ri, days[b])
+                    e2 = inst.evaluate(sol)
+                    if e2["feasible"]:
+                        k2 = key3(inst, e2, ref)
+                        if k2 < cur:
+                            cur, keep, changed = k2, sol[b], True
+                sol[b] = keep
+            if not changed:
+                break
+        if cur < best_k:
+            best, best_k = dict(sol), cur
+    return best, best_k
+
+
+def polish(inst, sol, ref, max_sweeps=10):
+    """坐标下降（路线 × 出发日），按 (合成分, V, 总里程) 比较：在合成分与 V 不变的前提下压低总里程。"""
+    sol = dict(sol)
+    cur = key3(inst, inst.evaluate(sol), ref)
+    for _ in range(max_sweeps):
+        changed = False
+        for b in inst.ids:
+            lo, hi = inst.window(b)
+            keep = sol[b]
+            for ri in range(len(inst.cands[b])):
+                for day in range(lo, hi + 1):
+                    if (ri, day) == keep:
+                        continue
+                    sol[b] = (ri, day)
+                    e2 = inst.evaluate(sol)
+                    if e2["feasible"]:
+                        k2 = key3(inst, e2, ref)
+                        if k2 < cur:
+                            cur, keep, changed = k2, (ri, day), True
+                sol[b] = keep
+        if not changed:
+            break
+    return sol, cur
