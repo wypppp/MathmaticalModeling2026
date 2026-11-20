@@ -85,6 +85,62 @@ for nb in (33, 34):
     for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("E", "失衡度"), ("pairs", "批次仓库对"), ("A", "代领代交等效车数")]:
         put(f"X.p4b.{nb}.{k}", pb.at[nb, col], "extra/p4_batches.csv", "R26", STATUS_X)
 
+sn = pd.read_csv(R / "extra/sens.csv").set_index("方案")
+for row, tag in [("G1 保障车分界 T≥26（问题2/3 指派）", "G1.p2"), ("G1 保障车分界 T≥26（问题4 指派）", "G1.p4")]:
+    put(f"X.sens.{tag}.N", sn.at[row, "总车数"], "extra/sens.csv", "R27", STATUS_X)
+    put(f"X.sens.{tag}.P", sn.at[row, "总人数"], "extra/sens.csv", "R27", STATUS_X)
+for row, tag in [("G2 里程上限 2200 km", "G2_2200"), ("G2 里程上限 2500 km", "G2_2500"), ("G7 装卸不取整", "G7"), ("G8 下的问题 3", "G8.p3"), ("G14 留置不受等待限制", "G14")]:
+    for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离")]:
+        put(f"X.sens.{tag}.{k}", sn.at[row, col], "extra/sens.csv", "R27", STATUS_X)
+g8 = "G8 问题2 要求双方时段相容（V⁰ 优先）"
+for k, col in [("B", "批次"), ("A", "代领代交等效车数"), ("N", "总车数"), ("P", "总人数")]:
+    put(f"X.sens.G8.p2.{k}", sn.at[g8, col], "extra/sens.csv", "R27", STATUS_X)
+put("X.sens.G16.feasible", bool(sn.at["G16 每个外部仓库只到访一次", "可行"]), "extra/sens.csv", "R27", STATUS_X, str(sn.at["G16 每个外部仓库只到访一次", "说明"]))
+
+r3 = pd.read_csv(R / "extra/r3_study.csv").set_index("项目")
+for row, k in [("问题4方案：代领③的块数", "p4.n"), ("问题4方案：自取货量（按货主车型的等效车数）", "p4.s"), ("问题4方案：自取往返里程（每个货主-仓库对计一次往返，km）", "p4.km"),
+               ("禁用③：问题 2 最少批次", "noR3.p2.B"), ("禁用③：问题 3（天/载货距离/偏离/里程）", "noR3.p3"),
+               ("禁用③：问题 4（批次/天/载货距离/偏离/失衡度/仓库对/代领代交/里程）", "noR3.p4")]:
+    put(f"X.r3.{k}", r3.at[row, "值"], "extra/r3_study.csv", "R26", STATUS_X)
+
+pr = pd.read_csv(R / "extra/p4_rules.csv")
+for i, tag in [(0, "p3"), (1, "p4")]:
+    for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("E", "失衡度"), ("pairs", "批次仓库对")]:
+        put(f"X.p4rules.{tag}.{k}", pr.iloc[i][col], "extra/p4_rules.csv", "R26", STATUS_X)
+
+sys.path.insert(0, str(ROOT / "src"))
+import f_blocks as fb  # noqa: E402
+for tag in ("p3", "p4"):
+    st = pd.read_csv(R / f"{tag}/steps_main.csv")
+    st = st[st.node.str.startswith("W")]
+    st = st[[n not in fb.H[u] for n, u in zip(st.node, st.unit)]]
+    put(f"{tag.upper()}.arrivals_ext", len(st), f"{tag}/steps_main.csv", "R25", STATUS_P34, "到达 H(x) 以外仓库的总次数（含重复到访）")
+    b = pd.read_csv(R / f"{tag}/batches_main.csv")
+    put(f"{tag.upper()}.n_leave_batches", int((b.n_leave > 0).sum()), f"{tag}/batches_main.csv", "R25", STATUS_P34)
+    put(f"{tag.upper()}.n_pass_batches", int((b.n_pass > 0).sum()), f"{tag}/batches_main.csv", "R25", STATUS_P34)
+b3 = pd.read_csv(R / "p3/batches_main.csv")
+put("P3.n_both_iso_opt", int(((b3.tau == b3.min_iso_tau) & ((b3.Lbar - b3.min_Lbar).abs() < 1e-6)).sum()), "p3/batches_main.csv", "R25", STATUS_P34, "同时达到孤立最少天数与最小载货距离的批次")
+put("P3.n_cands", int(b3.n_cands.sum()), "p3/batches_main.csv", "R25", STATUS_P34)
+
+for tag, path in (("P2", "p2/assign_main.csv"), ("P4", "p4/assign_main.csv")):
+    a = pd.read_csv(R / path)
+    t = a[a.option != "own"]
+    put(f"{tag}.n_delegated", len(t), path, "R25", "A" if tag == "P2" else STATUS_P34)
+    for c, n in t.case.value_counts().items():
+        put(f"{tag}.case.{c}", int(n), path, "R25", "A" if tag == "P2" else STATUS_P34)
+    put(f"{tag}.n_removed_batches", len(set(a.batch)) - len(set(a[a.option == "own"].batch)), path, "R25", "A" if tag == "P2" else STATUS_P34)
+a4 = pd.read_csv(R / "p4/assign_main.csv")
+put("P4.n_changed_vs_p3", int(a4.changed_vs_p3.sum()), "p4/assign_main.csv", "R25", STATUS_P34)
+tr = pd.read_csv(R / "p1/trace.csv")
+put("P1.n_blocks", len(tr), "p1/trace.csv", "R10", "A")
+for h, n in tr.how.value_counts().items():
+    put(f"P1.how.{h}", int(n), "p1/trace.csv", "R10", "A")
+for c, n in tr[tr.how != "自办"].case.value_counts().items():
+    put(f"P1.case.{c}", int(n), "p1/trace.csv", "R10", "A")
+put("P1.table.N_before_after", "363→374", "R1（附件 2、3 表列合计）", "R1", "A")
+put("P1.table.P_before_after", "962→963", "R1（附件 2、3 表列合计）", "R1", "A")
+put("P2.n_options", 197, "f_p2.options 计数（本脚本外算得，2026-11-20）", "R27", STATUS_P2)
+
 out = ROOT / "paper" / "numbers.csv"
 with out.open("w", encoding="utf-8-sig", newline="") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0]))

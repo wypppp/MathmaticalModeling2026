@@ -79,11 +79,51 @@ def t_s10(ws):
     raise RuntimeError("没有留置")
 
 
+def t_time(ws):
+    st = stops(ws)
+    s = st[3]
+    t = ws.cell(s["row"], 5).value
+    ws.cell(s["row"], 5).value = t + dt.timedelta(minutes=10)
+    return f"批 {s['b']} 第 {s['row']} 行到达时刻 +10 分钟"
+
+
+def t_qty(ws):
+    for r in ws.iter_rows(min_row=2, max_col=14):
+        if isinstance(r[7].value, (int, float)) and r[7].value > 1:
+            r[7].value = r[7].value + 1
+            return f"第 {r[7].row} 行货物数量 +1"
+    raise RuntimeError
+
+
+def t_shift(ws):
+    st = stops(ws)
+    b0 = st[0]["b"]
+    n = 0
+    for s in st:
+        if s["b"] == b0:
+            for c in (5, 13):
+                v = ws.cell(s["row"], c).value
+                if v is not None:
+                    ws.cell(s["row"], c).value = v + dt.timedelta(days=30)
+            n += 1
+    return f"批 {b0} 全部 {n} 站推迟 30 天"
+
+
+def t_flag(ws):
+    for r in ws.iter_rows(min_row=2, max_col=14):
+        if r[8].value == 1:
+            r[8].value = 0
+            r[9].value = None
+            return f"第 {r[8].row} 行代领改为自领"
+    raise RuntimeError
+
+
 if __name__ == "__main__":
     base = run(P3)
     assert "违例 0 条" in base, base
     print("原表：违例 0 条")
-    res = [case("S15 无关节点", "S15", t_s15), case("S10 留置 16:00 边界", "S10", t_s10)]
+    res = [case("到达时刻 +10 分钟", "时刻", t_time), case("货量 +1", "守恒", t_qty), case("整批推迟 30 天", "S2", t_shift),
+           case("代领改自领", "守恒", t_flag), case("S15 无关节点", "S15", t_s15), case("S10 留置 16:00 边界", "S10", t_s10)]
     print("未做篡改自检的新规则：S11 逆序汇合（现方案没有多站留置）、R5 先后（篡改需要挪动跨站的作业段）。"
           "S12 前后两半、R4 整批先后已在旧方案（提交 928738d、2276c9b）的真实违例上被检查器报出。")
     sys.exit(0 if all(res) else 1)

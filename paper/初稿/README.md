@@ -11,7 +11,7 @@
 | 04_问题1.md … 07_问题4.md | 第六至九章 |
 | 08_灵敏度与评价.md | 第十、十一章、AI 声明、参考文献、附录 |
 
-- 数字只从 `paper/numbers.csv` 取；数字后的 HTML 注释是键。重跑后执行 `python tools/paper_numbers.py`，用 `git diff paper/numbers.csv` 看哪些数变了。
+- 数字只从 `paper/numbers.csv` 取（百分比、差值由表中的数算出）；数字后的 HTML 注释是键。重跑后执行 `python tools/paper_numbers.py`，用 `git diff paper/numbers.csv` 看哪些数变了。
 - 【】标出的是待生成的图表或待补的内容。图表须由代码直接生成。
 - 定稿前删除全部 HTML 注释和【】。
 - 正文不超过 30 页、不要目录；附录须含全部源程序（格式规范第四、五条）。
