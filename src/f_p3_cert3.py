@@ -8,7 +8,7 @@
 - 每个向量：E = ⌊(z* − δ·WD − off_t)/WT⌋，预算 = z* − δ·WD − off_t；分簇枚举并整簇回放，得到各簇 (超额 τ, 超额 L̄) 前沿再组合。
 - 并行：簇内深度优先搜索按第 SPLIT 层的前缀编号轮流分给各分片（同一向量内也能并行），merge 汇总。
 - 已知局限（同 R41）：候选只含孤立满足 S10 的路线。
-用法：python src/f_p3_cert3.py measure | run <part> <nparts> | merge
+用法：python src/f_p3_cert3.py measure | run <part> <nparts> [tie] [delta] [v] | merge（末尾 v = 按向量分片）
 输出：results/F/p3_cert3/
 """
 from __future__ import annotations
@@ -158,37 +158,58 @@ def cluster_front(inst, cl, days, cand, iv, mt, mL, E, budget, part, nparts):
     return front, n_sim
 
 
-def run(part, nparts, only_tie=None, only_delta=None):
+def run(part, nparts, only_tie=None, only_delta=None, by_vec=False):
+    """by_vec=True：按向量编号 vi % nparts 分片，向量内不再按前缀拆分（向量多而小时更均衡）。
+    每完成一个向量就写一次 .partial，可中断续跑；全部完成后才改名为正式分片文件（merge 只认正式文件）。"""
     t0 = time.time()
     R, insts, pick, inc, ev, z, V = setup()
-    rows = []
+    OUT.mkdir(parents=True, exist_ok=True)
+    tag = "" if only_tie is None else f"_t{only_tie}" + ("" if only_delta is None else f"_d{only_delta}") + ("v" if by_vec else "")
+    final = OUT / f"part{part}of{nparts}{tag}.csv"
+    partial = OUT / f"part{part}of{nparts}{tag}.partial"
+    rows, done = [], set()
+    if partial.exists():
+        old = pd.read_csv(partial)
+        rows = old.to_dict("records")
+        done = set(zip(old.tie, old.vec))
+        print(f"[part {part}] 续跑：已有 {len(done)} 个向量", flush=True)
     for t, inst in insts.items():
         if only_tie is not None and t != only_tie:
             continue
         p = plan(inst, z)
         reps, _ = c2.collapse(inst)
         for vi, v in enumerate(p["vecs"]):
+            if by_vec and vi % nparts != part:
+                continue
+            if (t, vi) in done:
+                continue
             dlt, budget, E, Vv = vec_params(inst, v, z, p["off"])
             if only_delta is not None and dlt != only_delta:
                 continue
+            new = []
             if E < 0:
-                if part == 0:
-                    rows.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=-1, tex=None, lex=None, n_sim=0, status="预算为负"))
-                continue
-            cls, cand, iv, ok = c2.clusters(inst, v, E, p["mt"], reps)
-            if not ok:
-                if part == 0:
-                    rows.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=-1, tex=None, lex=None, n_sim=0, status="R4 算术不可行"))
-                continue
-            for ci, c in enumerate(cls):
-                fr_, ns = cluster_front(inst, c, v, cand, iv, p["mt"], p["mL"], E, budget, part, nparts)
-                rows.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=ci, tex=None, lex=None, n_sim=ns, status="簇", n_clusters=len(cls)))
-                for tex, lex in fr_.items():
-                    rows.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=ci, tex=tex, lex=lex, n_sim=0, status="前沿", n_clusters=len(cls)))
-            print(f"[part {part}] 指派 {t} 向量 {vi}/{len(p['vecs'])}（δ={dlt}, E={E}, 簇 {len(cls)}）  {time.time() - t0:.0f}s", flush=True)
-    OUT.mkdir(parents=True, exist_ok=True)
-    tag = "" if only_tie is None else f"_t{only_tie}" + ("" if only_delta is None else f"_d{only_delta}")
-    pd.DataFrame(rows).to_csv(OUT / f"part{part}of{nparts}{tag}.csv", index=False, encoding="utf-8-sig")
+                if by_vec or part == 0:
+                    new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=-1, tex=None, lex=None, n_sim=0, status="预算为负"))
+            else:
+                cls, cand, iv, ok = c2.clusters(inst, v, E, p["mt"], reps)
+                if not ok:
+                    if by_vec or part == 0:
+                        new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=-1, tex=None, lex=None, n_sim=0, status="R4 算术不可行"))
+                else:
+                    sp, sn = (0, 1) if by_vec else (part, nparts)
+                    for ci, c in enumerate(cls):
+                        fr_, ns = cluster_front(inst, c, v, cand, iv, p["mt"], p["mL"], E, budget, sp, sn)
+                        new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=ci, tex=None, lex=None, n_sim=ns, status="簇", n_clusters=len(cls)))
+                        for tex, lex in fr_.items():
+                            new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=ci, tex=tex, lex=lex, n_sim=0, status="前沿", n_clusters=len(cls)))
+                    print(f"[part {part}] 指派 {t} 向量 {vi}/{len(p['vecs'])}（δ={dlt}, E={E}, 簇 {len(cls)}）  {time.time() - t0:.0f}s", flush=True)
+            if by_vec and not new:  # 保证每个分到的向量都留下记录，merge 才能判“已运行”
+                new.append(dict(tie=t, vec=vi, delta=dlt, V=Vv, E=E, cluster=-1, tex=None, lex=None, n_sim=0, status="簇", n_clusters=0))
+            rows += new
+            pd.DataFrame(rows).to_csv(partial, index=False, encoding="utf-8-sig")
+    pd.DataFrame(rows).to_csv(final, index=False, encoding="utf-8-sig")
+    if partial.exists():
+        partial.unlink()
     print(f"[part {part}] 完成  {time.time() - t0:.0f}s")
 
 
@@ -253,4 +274,4 @@ if __name__ == "__main__":
     {"measure": measure, "merge": merge}.get(sys.argv[1], None) and {"measure": measure, "merge": merge}[sys.argv[1]]()
     if sys.argv[1] == "run":
         a = sys.argv[2:]
-        run(int(a[0]), int(a[1]), int(a[2]) if len(a) > 2 else None, int(a[3]) if len(a) > 3 else None)
+        run(int(a[0]), int(a[1]), int(a[2]) if len(a) > 2 else None, int(a[3]) if len(a) > 3 else None, by_vec=len(a) > 4 and a[4] == "v")
