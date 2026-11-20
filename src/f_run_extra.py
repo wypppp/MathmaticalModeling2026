@@ -177,6 +177,26 @@ def p4_batches():
     pd.DataFrame(rows).to_csv(OUT / "p4_batches.csv", index=False, encoding="utf-8-sig")
 
 
+def p3_via():
+    """X1 的反面（表 10-1 第 12 行）：允许经本批次站点（驻地、可用队属仓库、本批次仓库）中转，其余按 v2.5（字面留置、现行 J1 标尺）。"""
+    import f_routes as fr
+    inst, base, evb = run3(a3)
+    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))  # 主流程的标尺
+    old = fr.ALLOW_VIA
+    fr.ALLOW_VIA = True
+    try:
+        ins, b, eb = run3(a3)
+        sol, ev = q3_search(ins, ref, b if eb["feasible"] else None)
+    finally:
+        fr.ALLOW_VIA = old
+    z = inst.score(ev, ref)[0]
+    row = dict(方案="允许经本批次站点中转（X1 反面）", 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"],
+               调运总里程=ev["D"], V=ev["V"], 等权合成分_主标尺=z, 途经批次=sum(ins.cands[x][sol[x][0]]["n_noop"] > 0 for x in ins.ids),
+               孤立下界_天=ins.lb_tau, 孤立下界_km=ins.lb_L)
+    pd.DataFrame([row]).to_csv(OUT / "p3_via.csv", index=False, encoding="utf-8-sig")
+    print(row)
+
+
 def p3_rules():
     """A2 的后续：时间规则换成备选读法后，问题 3（同一指派）重新搜索的结果。只读分析，不改主结果。"""
     rows = []
@@ -402,6 +422,8 @@ if __name__ == "__main__":
         sens()
     if what == "s12":
         p3_s12()
+    if what == "via":
+        p3_via()
     if what == "nobase":
         p3_nobase()
     if what in ("p4rules", "all"):
