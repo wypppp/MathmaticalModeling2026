@@ -1,6 +1,6 @@
 """补充实验：问题 3 的消融与合成方式敏感性；代领③的对照与自取量；问题 4 的批次数折衷；口径灵敏度。
 
-用法：python src/f_run_extra.py [p3|r3|p4b|rules|p4rules|all]
+用法：python src/f_run_extra.py [p3|r3|p4b|rules|p4rules|sens|all]
 输出：results/F/extra/*.csv
 """
 from __future__ import annotations
@@ -264,6 +264,79 @@ def p3_s12():
     pd.DataFrame(rows).to_csv(OUT / "p3_s12.csv", index=False, encoding="utf-8-sig")
 
 
+def _p3_once(assign, tag, cand_filter=None):
+    inst = f_p3.Instance(assign, batches, blocks, cap, D, cand_filter=cand_filter)
+    if not inst.routable:
+        return dict(方案=tag, 可行=False, 说明="有批次无合规路线：" + " ".join(str(b) for b in inst.ids if not inst.cands[b]))
+    base = inst.baseline()
+    evb = inst.evaluate(base)
+    if not evb["feasible"]:
+        return dict(方案=tag, 可行=False, 说明="基线排不出")
+    ref = dict(l=(inst.lb_tau, inst.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))
+    sol, _ = inst.improve(base, ref)
+    ev = inst.evaluate(sol)
+    return dict(方案=tag, 可行=ev["feasible"], 执行总时间=ev["tau"], 载货总行驶距离=ev["L"], 开始偏离=ev["delta"], 调运总里程=ev["D"],
+                基线_天=evb["tau"], 基线_km=evb["L"], 孤立下界_天=inst.lb_tau, 孤立下界_km=inst.lb_L)
+
+
+def once_per_stop(e):
+    """G16 敏感性：每个外部仓库只到访一次。驻地和自己的队属仓库可以重复（S12 要求出发先装、返程再卸，队属仓库必到两次）。"""
+    u = e["steps"][-1].node
+    ext = [st.node for st in e["steps"][:-1] if st.node.startswith("W") and st.node not in fb.H[u]]
+    return len(ext) == len(set(ext))
+
+
+def sens():
+    """spec §6 标“做”的口径敏感性：G1、G2、G7、G8、G14、G16。只读分析，主结果不变。"""
+    import math
+    import f_engine as fe_
+    import f_routes as fr_
+    rows = []
+    # G1：保障车分界改为 T ≥ 26 取 2 台（只影响车数、人数）
+    for tag, path in (("问题2/3 指派", ROOT / "results/F/p2/assign_main.csv"), ("问题4 指派", ROOT / "results/F/p4/assign_main.csv")):
+        a = load_assign(path, blocks)
+        rs, tot, _ = f_p2.summarize(a, batches, blocks, cap)
+        N = sum(r["T"] + 1 + (1 if r["T"] <= 25 else 2) + min(2, math.ceil(r["T"] / 10)) for r in rs)
+        P = sum(2 * (r["T"] + 1 + (1 if r["T"] <= 25 else 2) + min(2, math.ceil(r["T"] / 10))) + 3 + 2 * math.ceil(r["T"] / 5) for r in rs)
+        rows.append(dict(方案=f"G1 保障车分界 T≥26（{tag}）", 可行=True, 总车数=N, 总人数=P, 原总车数=tot["N"], 原总人数=tot["P"]))
+        print(rows[-1])
+    # G2：里程上限 2200、2500 km（问题 2 的里程割在主方案中没有起作用，只影响问题 3 的路线空间）
+    for km in (2200.0, 2500.0):
+        old = fr_.MAX_KM
+        fr_.MAX_KM = km
+        try:
+            rows.append(_p3_once(a3, f"G2 里程上限 {km:.0f} km"))
+        finally:
+            fr_.MAX_KM = old
+        print(rows[-1])
+    # G7：装卸用时不取整
+    fe_.OPT["no_ceil"] = True
+    try:
+        rows.append(_p3_once(a3, "G7 装卸不取整"))
+    finally:
+        fe_.OPT["no_ceil"] = False
+    print(rows[-1])
+    # G8：问题 2 要求代领代交双方的允许出发区间相交（V⁰ 放到批次数之前）
+    r = f_p2.solve(batches, blocks, cap, D, levels=("U9", "V0", "B", "A"))
+    _, tot8, _ = f_p2.summarize(r["assign"], batches, blocks, cap)
+    rows.append(dict(方案="G8 问题2 要求双方时段相容（V⁰ 优先）", 可行=True, 批次=tot8["B"], 代领代交等效车数=tot8["A"], 总车数=tot8["N"], 总人数=tot8["P"],
+                     V0=r["stats"].get("V0")))
+    print(rows[-1])
+    rows.append(_p3_once(r["assign"], "G8 下的问题 3"))
+    print(rows[-1])
+    # G14：留置不受“等待 1 天”限制
+    fr_.LEAVE_WAIT_LIMIT = False
+    try:
+        rows.append(_p3_once(a3, "G14 留置不受等待限制"))
+    finally:
+        fr_.LEAVE_WAIT_LIMIT = True
+    print(rows[-1])
+    # G16：每站只到访一次
+    rows.append(_p3_once(a3, "G16 每个外部仓库只到访一次", once_per_stop))
+    print(rows[-1])
+    pd.DataFrame(rows).to_csv(OUT / "sens.csv", index=False, encoding="utf-8-sig")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
@@ -276,6 +349,8 @@ if __name__ == "__main__":
         p4_batches()
     if what in ("rules", "all"):
         p3_rules()
+    if what in ("sens", "all"):
+        sens()
     if what == "s12":
         p3_s12()
     if what in ("p4rules", "all"):

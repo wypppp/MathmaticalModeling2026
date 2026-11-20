@@ -19,6 +19,7 @@ import f_engine as fe
 
 MAX_VISIT = 2
 MAX_KM = 2000.0
+LEAVE_WAIT_LIMIT = True  # G14：留置车也受“最多等待 1 天”限制；False 为敏感性（留置不受限）
 
 
 @dataclass
@@ -100,8 +101,9 @@ def _subsets(xs):
     return [tuple(x for i, x in enumerate(xs) if m >> i & 1) for m in range(1 << len(xs))]
 
 
-def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
-    """返回完整路线列表，每条为 list[fe.Step]（末尾为回驻地）。"""
+def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
+    """返回完整路线列表，每条为 list[fe.Step]（末尾为回驻地）。max_km 缺省时取调用时的 MAX_KM（G2 敏感性可改模块变量）。"""
+    max_km = MAX_KM if max_km is None else max_km
     gids = list(groups)
     s = {g: groups[g].s for g in gids}
     res = []
@@ -202,14 +204,14 @@ def evaluate(bid, unit, T, steps, D, start_day=10):
     for st, lg in zip(steps, r.logs):
         if st.rejoin and st.node in left_at:
             # S10：留置车整日闲置天数；汇合车队 16:00 才到时，当天也算闲置
-            if lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
+            if LEAVE_WAIT_LIMIT and lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
                 ok = False
         if st.leave:
             left_at[st.node] = lg.end[0]
     return dict(D=r.D, Lbar=r.Lbar, veh_km=r.veh_km, tau=r.tau, ok=ok, res=r, n_leave=sum(bool(st.leave) for st in steps))
 
 
-def candidates(bid, unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
+def candidates(bid, unit, T, groups, D, max_km=None, allow_leave=True):
     """枚举并评估，返回按 (tau, Lbar, D) 非支配的候选列表（每项含 steps 和指标）。"""
     out = []
     for steps in enumerate_routes(unit, T, groups, D, max_km, allow_leave):

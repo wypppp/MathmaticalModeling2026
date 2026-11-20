@@ -118,7 +118,7 @@ class Instance:
                     idle = lg.start[0] - lg.arrive[0] - 1 + (1 if lg.arrive[1] < 1e-9 else 0)
                     if idle > 1:
                         viol.append(("S10排队", b, st.node))
-                if st.rejoin and st.node in left_at and lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
+                if fr.LEAVE_WAIT_LIMIT and st.rejoin and st.node in left_at and lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
                     viol.append(("S10留置", b, st.node))
                 if st.leave:
                     left_at[st.node] = lg.end[0]
