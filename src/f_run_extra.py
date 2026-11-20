@@ -28,7 +28,7 @@ a3 = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
 
 
 def run3(assign, **kw):
-    inst = f_p3.Instance(assign, batches, blocks, cap, D, **kw)
+    inst = f_p3.Instance(assign, batches, blocks, cap, D, **{"prune": True, **kw})
     if not inst.routable:
         return None
     base = inst.baseline()
@@ -97,7 +97,7 @@ def r3_study():
     # 禁用③的问题 3、问题 4（同一套标尺）
     inst0, base0, evb0 = run3(a3)
     ref = dict(l=(inst0.lb_tau, inst0.lb_L, 0.0), u=(evb0["tau"], evb0["L"], evb0["delta"]))
-    instN = f_p3.Instance(aN, batches, blocks, cap, D)
+    instN = f_p3.Instance(aN, batches, blocks, cap, D, prune=True)
     bN = instN.baseline()
     solN, _ = instN.improve(bN, ref)
     evN = instN.evaluate(solN)
@@ -129,7 +129,7 @@ def p4_batches():
     for nb in (33, 34):
         r = f_p2.solve(batches, blocks, cap, D, fix_batches=nb, levels=("U9", "A", "V0"))
         a0 = r["assign"]
-        ins = f_p3.Instance(a0, batches, blocks, cap, D)
+        ins = f_p3.Instance(a0, batches, blocks, cap, D, prune=True)
         s0 = ins.baseline()
         if not ins.evaluate(s0)["feasible"]:
             rows.append(dict(批次=nb, 说明="起点排不出"))
@@ -245,7 +245,7 @@ def p3_s12():
     rows = []
     for tag, flt, r4 in (("现行（未执行 S12）", None, "phys"), ("执行 S12", s12_ok, "phys"), ("D15 整批先后", None, "batch"), ("执行 S12 + D15 整批先后", s12_ok, "batch")):
         f_p3.R4_RULE = r4
-        inst = f_p3.Instance(a3, batches, blocks, cap, D, cand_filter=flt)
+        inst = f_p3.Instance(a3, batches, blocks, cap, D, cand_filter=flt, prune=True)
         if not inst.routable:
             bad = [b for b in inst.ids if not inst.cands[b]]
             rows.append(dict(方案=tag, 可行=False, 排不出的批次=" ".join(map(str, bad))))
@@ -265,7 +265,7 @@ def p3_s12():
 
 
 def _p3_once(assign, tag, cand_filter=None):
-    inst = f_p3.Instance(assign, batches, blocks, cap, D, cand_filter=cand_filter)
+    inst = f_p3.Instance(assign, batches, blocks, cap, D, cand_filter=cand_filter, prune=True)
     if not inst.routable:
         return dict(方案=tag, 可行=False, 说明="有批次无合规路线：" + " ".join(str(b) for b in inst.ids if not inst.cands[b]))
     base = inst.baseline()

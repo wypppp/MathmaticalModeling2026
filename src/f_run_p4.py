@@ -33,7 +33,7 @@ def main():
     batches, blocks = fb.build(4)
     a3 = load_assign(ROOT / "results" / "F" / "p2" / "assign_main.csv", blocks)
     # 问题 3 的方案（重建以得到与缓存一致的路线编号）
-    inst3 = f_p3.Instance(a3, batches, blocks, cap, D)
+    inst3 = f_p3.Instance(a3, batches, blocks, cap, D, prune=True)
     base = inst3.baseline()
     evb = inst3.evaluate(base)
     ref3 = dict(l=(inst3.lb_tau, inst3.lb_L, 0.0), u=(evb["tau"], evb["L"], evb["delta"]))

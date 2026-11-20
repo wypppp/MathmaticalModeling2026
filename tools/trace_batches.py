@@ -2,7 +2,7 @@
 
 货物、货主取自结果表 results/F/问题3_results.xlsx（附件 7 格式）；精确时刻取自引擎台账 results/F/p3/steps_main.csv；
 规则原句取自原题“运输车辆和货物仓库的相关数据和要求”第 1–10 条（problem/F/F.md 第 221–239 行）。不调用求解代码。
-用法：python tools/trace_batches.py [原批次号 ...]（默认 1 13 25）
+用法：python tools/trace_batches.py [原批次号 ...]（默认 1 13 25 27；27 含排队等待）
 输出：review/human_trace_p3.md
 """
 from __future__ import annotations
@@ -53,14 +53,14 @@ def goods_text(seg, unit):
 
 
 def main():
-    ids = [int(x) for x in sys.argv[1:]] or [1, 13, 25]
+    ids = [int(x) for x in sys.argv[1:]] or [1, 13, 25, 27]
     P3 = {bt["id"]: bt for bt in fc.read_p3(ROOT / "results/F/问题3_results.xlsx")}
     s = pd.read_csv(ROOT / "results/F/p3/steps_main.csv")
     bm = pd.read_csv(ROOT / "results/F/p3/batch_id_map.csv").set_index("orig_batch")
     bt_ = pd.read_csv(ROOT / "results/F/p3/batches_main.csv").set_index("batch")
     D = fc.read_dist()
     H = fc.H
-    out = ["# 问题 3 主方案：三个批次的按天时间线（请对照原题核对）", "",
+    out = ["# 问题 3 主方案：四个批次的按天时间线（请对照原题核对）", "",
            "> 由 `tools/trace_batches.py` 生成（货物取自 `results/F/问题3_results.xlsx`，时刻取自 `results/F/p3/steps_main.csv`）。",
            "> 读法：每批先看“这一批要办的事”，再按天看时间线；每处停下来的地方都写了依据的是原题哪一条。最后的“核对题”只需回答 是 / 否，",
            "> 答“否”的请在题后写一句原因。规则编号指原题“运输车辆和货物仓库的相关数据和要求”第 1–10 条。", ""]

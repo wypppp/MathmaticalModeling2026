@@ -17,7 +17,7 @@
 | 1 | 不变（R25/R29）：Y1 统筹前后 32→27 批、392→374 辆、1020→963 人、仓库对 59→45、里程 32489→25513 km、载货距离 16944.6→13477.9 km；16 笔转移全部合规；16/27 批越窗（251 天）；按表执行 111 天对表列 104 天，11 批不足 |
 | 2 | 不变：**32 批、474 辆、1212 人、代领代交 10.868**；仓库对 51，E = 0.651；gap = 0，GPT CP-SAT 独立一致。D2 读法 b（全部代办另须“就近”）下 34 批（R32） |
 | 3 | **126 天 / 偏离 5 / 总里程 29719 / 载货距离 12604.056**（R33；R25 为 127 / 29803 / 12602.536）；基线 134 / 14412.9 / 5；合成分下界 1.120（主结果 1.2205）。更好方案若存在须 δ=5 且 τ≤125 或（τ=126 且 L̄<12604.056）（R35） |
-| 4 | R25 指派、全候选重做路线（R34）：**127 天 / 偏离 0 / 29499 km / 12470.830 km / E = 0.408 / 仓库对 46 / 代领代交 15.515 / 473 辆 / 1210 人 / V 17**；比问题 3 多 1 天，其余四项更优 |
+| 4 | R25 指派、全候选重做路线（R34）：**127 天 / 偏离 0 / 29499 km / 12470.830 km / E = 0.408 / 仓库对 46 / 代领代交 15.515 / 473 辆 / 1210 人 / V 17**；比问题 3 多 1 天，其余四项更优；该指派的孤立下界 123 天 / 12443.4 km，未证明最优 |
 
 ### 正确性与最优性（写论文、答辩都按这个口径）
 - **实现符合 spec v2.3**：把握高。四问都有两套独立实现一致，检查器违例 0，6 种篡改自检通过
@@ -26,7 +26,7 @@
 - **单方结果**：消融、灵敏度、批次折衷（R26、R27）大多未经复算；只有“禁用代领③为 33 批”“不允许提前出发不可行”由 GPT 证实（R29）
 
 ### 文件入口
-- 主流程：`python src/f_run_p2.py`、`f_run_p3.py`、`f_run_p4.py 600`、`f_p1.py`；补充实验 `src/f_run_extra.py all`、`src/f_a2.py`
+- 主流程：`python src/f_run_p2.py` → `f_run_p3.py`（全候选集 + 多起点，R33）→ `f_run_p4_reroute.py`（沿用 `results/F/p4/assign_main.csv` 的指派、全候选重做路线，R34）；`f_p1.py`。**`f_run_p4.py 600` 是 R25 的改派搜索（剪枝候选），重跑会覆盖 `p4/assign_main.csv`，之后须再跑 `f_run_p4_reroute.py`**；补充实验 `src/f_run_extra.py all`、`src/f_a2.py` 仍为 R25 流程（剪枝候选、只做坐标下降）；证书 `src/f_p3_cert.py`、`f_p3_cert2.py run`；时间线 `tools/trace_batches.py`；包 3 探测 `tools/pack3_probe.py`
 - 检查：`python tools/f_check.py <附件6格式> <附件7/8格式>`；`tools/a5_verify.py`；`tests/`（`f_test_data.py`、`f_test_engine.py`、`f_test_checker.py`）
 - 结果：`results/F/问题2_results.xlsx`、`问题3_results.xlsx`、`问题4_results.xlsx`（附件 6、7、8），`问题4_附件6格式.xlsx`；台账 `results/F/p1–p4/`、`extra/`、`checks/`
 - 论文：`paper/初稿/`（按章分文件，README 有说明）；数字表 `paper/numbers.csv`（`python tools/paper_numbers.py`）；图 `paper/figs/`（`python tools/make_figures.py`）；表 `paper/tables/`（`python tools/make_tables.py`）。**任何重跑之后，三个脚本都要重跑，并 `git diff paper/numbers.csv`**

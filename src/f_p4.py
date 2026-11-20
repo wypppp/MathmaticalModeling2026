@@ -83,7 +83,7 @@ class P4:
         return True
 
     def instance(self, a):
-        return f_p3.Instance(a, self.batches, self.blocks, self.cap, self.D, cache=self.cache)
+        return f_p3.Instance(a, self.batches, self.blocks, self.cap, self.D, cache=self.cache, prune=True)  # R25 流程：剪枝候选（全候选下每步约贵 9 倍）
 
     def score(self, a, ev):
         _, tot, _ = f_p2.summarize(a, self.batches, self.blocks, self.cap)
