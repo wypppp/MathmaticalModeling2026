@@ -78,6 +78,9 @@ for row, tag in [("关闭留置", "noleave"), ("关闭途经（每段只走直�
                  ("合成方式：先比最差项", "minimax"), ("合成方式：权重 0.4/0.4/0.2", "w442")]:
     for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离")]:
         put(f"X.ablation.{tag}.{k}", ab.at[row, col], "extra/p3_ablation.csv", "R26", STATUS_X)
+via = pd.read_csv(R / "extra/p3_via.csv").iloc[0]
+for k, col in [("tau", "执行总时间"), ("L", "载货总行驶距离"), ("delta", "开始偏离"), ("D", "调运总里程")]:
+    put(f"X.via.{k}", via[col], "extra/p3_via.csv", "R42", STATUS_X, "X1 反面：允许经本批次站点中转（v2.5 其余规则）")
 put("X.ablation.noearly.feasible", bool(ab.at["不允许提前出发", "可行"]), "extra/p3_ablation.csv", "R26/R25", "A", "GPT 第二批复算给出证明")
 
 rl = pd.read_csv(R / "extra/p3_rules.csv").set_index("读法")

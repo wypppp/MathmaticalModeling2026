@@ -121,6 +121,10 @@ X.ablation.minimax.delta,5.0,extra/p3_ablation.csv,R26,C,
 X.ablation.w442.tau,127.0,extra/p3_ablation.csv,R26,C,
 X.ablation.w442.L,13294.768446,extra/p3_ablation.csv,R26,C,
 X.ablation.w442.delta,7.0,extra/p3_ablation.csv,R26,C,
+X.via.tau,126,extra/p3_via.csv,R42,C,X1 反面：允许经本批次站点中转（v2.5 其余规则）
+X.via.L,12604.056135,extra/p3_via.csv,R42,C,X1 反面：允许经本批次站点中转（v2.5 其余规则）
+X.via.delta,5,extra/p3_via.csv,R42,C,X1 反面：允许经本批次站点中转（v2.5 其余规则）
+X.via.D,29719.0,extra/p3_via.csv,R42,C,X1 反面：允许经本批次站点中转（v2.5 其余规则）
 X.ablation.noearly.feasible,False,extra/p3_ablation.csv,R26/R25,A,GPT 第二批复算给出证明
 X.rules.spec.tau,129,extra/p3_rules.csv,R26,C,
 X.rules.spec.L,13294.768446,extra/p3_rules.csv,R26,C,
