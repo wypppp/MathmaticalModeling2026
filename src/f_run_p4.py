@@ -90,6 +90,7 @@ def main():
                          批次仓库对=dd["pairs"], 车公里=dd["veh_km"], V=dd["V"]))
     sdf = pd.DataFrame(summ)
     sdf.to_csv(OUT / "summary.csv", index=False, encoding="utf-8-sig")
+    sdf.to_csv(OUT / "summary_search.csv", index=False, encoding="utf-8-sig")  # 搜索终点（供 f_run_p4_reroute.py 读取）
     print(sdf.T.to_string())
     # 台账与结果表
     dump3("main", inst, sol, ev)

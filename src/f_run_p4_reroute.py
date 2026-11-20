@@ -66,11 +66,10 @@ def main():
     assert ev3["feasible"], "问题 3 台账与当前实例不一致，请先运行 f_run_p3.py"
     sc3, d3 = P.score(a3, ev3)
     sc4, d4 = P.score(a4, ev)
-    if (OUT / "summary.csv").exists() and not (OUT / "summary_R25.csv").exists():
-        shutil.copy(OUT / "summary.csv", OUT / "summary_R25.csv")
-    oldsum = pd.read_csv(OUT / "summary_R25.csv")
+    src_sum = OUT / "summary_search.csv" if (OUT / "summary_search.csv").exists() else OUT / "summary_R25.csv"
+    oldsum = pd.read_csv(src_sum)  # 改派搜索的终点（f_run_p4.py 输出；没有时用 R25 的）
     ends = oldsum[oldsum["方案"].str.startswith("搜索终点")].copy()
-    ends["方案"] = ends["方案"].str.replace("搜索终点：", "搜索终点（R25，剪枝候选）：", regex=False)
+    ends["方案"] = ends["方案"].str.replace("搜索终点：", "搜索终点（剪枝候选）：", regex=False)
     rows = []
     for nm, dd, s in (("问题3方案", d3, sc3), ("问题4方案（R25 指派，全候选重做路线）", d4, sc4)):
         rows.append(dict(方案=nm, 合成分=s, 调运总批次=dd["B"], 调运总车数=dd["N"], 出动总人数=dd["P"], 代领代交等效车数=dd["A"], 人员调动执行总时间=dd["tau"],
