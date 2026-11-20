@@ -88,8 +88,8 @@ def read_demand():
         src, dst = m.group(1), m.group(2)
         rm = str(g(r, 11) or "")
         w, dr = (src, "领") if dst == u else (dst, "交")
-        ms = re.search(r"(?:存放至|放置于)(W[A-Z])", rm)
-        h = ms.group(1) if ms else (H[u][0] if len(H[u]) == 1 else None)
+        ms = re.search(r"(?:存放至|放置于)(W[A-Z])|从(W[A-Z])装载", rm)
+        h = (ms.group(1) or ms.group(2)) if ms else (H[u][0] if len(H[u]) == 1 else None)
         dem.append(dict(batch=b, unit=u, w=w, dir=dr, h=h, item=str(item).strip(), qty=float(g(r, 7))))
     return dem, info
 
@@ -208,8 +208,15 @@ def main():
         targets, special = set(), set()
         recv = send = 0.0
         start_day = None
+        first_ext = None  # S12：第一个有作业的外部仓库的站序
+        dj_load = defaultdict(list)  # R5：(属主, 节点) -> 代交货装车的站序
+        act_nodes = {x} | own | {s_["node"] for s_ in bt["stops"] if s_["segs"]}
         for i, st in enumerate(bt["stops"]):
             n = st["node"]
+            if n not in act_nodes:
+                V("S15", b, f"第 {i} 站经过与本批无关的节点 {n}")
+            if first_ext is None and n.startswith("W") and n not in own and st["segs"]:
+                first_ext = i
             d = D[(pos, n)] if pos != n else 0.0
             if i == 0:
                 # 出发时刻 = 出发日 8:00；由首站到达时刻反推出发日
@@ -226,6 +233,8 @@ def main():
                 g[4] += d
             pos = n
             if n in left and not any(sg["follow"] == "否" for sg in st["segs"]):
+                if n != list(left)[-1]:
+                    V("S11", b, f"在 {n} 汇合，但最近一次留置在 {list(left)[-1]}（应按相反顺序汇合）")
                 grp = left.pop(n)
                 onboard += grp
                 movT += ceil_(sum(g[3] for g in grp))
@@ -243,7 +252,9 @@ def main():
                     if sg["io"] == "发":
                         sl += e1
                         moves[(owner, it)][n] += q
-                        row = [owner, it, q, e1, 0.0, n, sg["flag"], False]
+                        row = [owner, it, q, e1, 0.0, n, sg["flag"], False, i]
+                        if sg["flag"] == -1:
+                            dj_load[(owner, n)].append(i)
                         (new_left if sg["follow"] == "否" else onboard).append(row)
                         if n in TEAM and n not in own and sg["flag"] == 0 and "领回" in sg["note"]:
                             stage_ld[(owner, it, n, q)] = (st["arrive"], b)
@@ -256,6 +267,10 @@ def main():
                             continue
                         onboard.remove(hit)
                         done.append(hit)
+                        if hit[6] == 0 and hit[5] in own and n not in own and first_ext is not None and hit[8] > first_ext:
+                            V("S12", b, f"自有送交货 {it} 在第 {hit[8]} 站（{hit[5]}）才装车，第 {first_ext} 站已在外部仓库作业")
+                        if hit[6] == 1 and n in TEAM and n not in own and dj_load.get((owner, n)) and hit[8] < min(dj_load[(owner, n)]):
+                            V("R5先后", b, f"代 {owner} 领的 {it} 在第 {hit[8]} 站装车，早于在 {n} 装代交货（第 {min(dj_load[(owner, n)])} 站）")
                         if sg["flag"] != 0:
                             A_tot += e1
                             flowHR[(x, owner)] += e1
@@ -359,7 +374,7 @@ def main():
                     V("时刻", b, f"{st['node']}→{nx['node']}：作业应于 {end:%m/%d %H:%M} 结束，应到 {exp_arr:%m/%d %H:%M}，表中 {nx['arrive']:%m/%d %H:%M}")
             if any(sg["follow"] == "否" for sg in st["segs"]):
                 left_day[st["node"]] = day_of(end)
-            elif st["node"] in left_day and day_of(st["arrive"]) - left_day.pop(st["node"]) - 1 > 1:
+            elif st["node"] in left_day and day_of(st["arrive"]) - left_day.pop(st["node"]) - 1 + (1 if hours(st["arrive"]) >= 8 - 1e-6 else 0) > 1:
                 V("S10", b, f"留置在 {st['node']} 的车整日等待超过 1 天")
         s_day, e_day = bt["_start"], day_of(stops[-1]["arrive"])
         if e_day > 91 or s_day < 1:
@@ -404,6 +419,7 @@ def main():
         for o2 in obs:
             if not (max(1, info[o2]["a"] - 6) <= s_day <= info[o2]["e"]):
                 Vpairs += 1
+        bt["_e_day"] = e_day
         metrics.append(dict(batch=b, orig=ob, unit=x, T=bt["_T"], N=N, P=P, start=s_day, end=e_day, tau=tau, delta=delta, D=bt["_D"],
                             Lbar=Lbar, veh_km=vk, n_targets=len(bt["_targets"]), targets="/".join(sorted(bt["_targets"]))))
         tau_sum += tau; delta_sum += delta; D_sum += bt["_D"]; L_sum += Lbar; vk_sum += vk
@@ -421,6 +437,9 @@ def main():
         t_un = endq.get((b1, st["_idx"]), st.get("_end"))
         if t_ld < t_un - TOL:
             V("R4", b2, f"领回早于暂存完成：{t_ld} < {t_un}")
+        bb = {bt["id"]: bt for bt in P3}
+        if bb[b2]["_start"] <= bb[b1].get("_e_day", 0):  # 【裁U2】整批先后：货主批次出发日 > 暂存批次回驻地日
+            V("R4整批", b2, f"货主批次 {b2} 出发日 {bb[b2]['_start']} 不晚于暂存批次 {b1} 回驻地日 {bb[b1].get('_e_day')}")
 
     # ---- 守恒：每个 (属主, 货物) 在各节点的净流出与附件 4 的需求一致（R3 的落仓允许 ≤150 km 的替代仓库）
     need = defaultdict(lambda: defaultdict(float))

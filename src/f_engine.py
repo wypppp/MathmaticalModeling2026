@@ -131,16 +131,16 @@ class Warehouse:
         while rem > EPS:
             if h >= day_len - EPS:
                 d, h = d + 1, 0.0
+            room = (VEH_CAP - self.veh.get(d, 0.0)) if queued else float("inf")
+            if room <= EPS:
+                d, h = d + 1, 0.0
+                continue
             if queued:
                 us = self.units.setdefault(d, set())
                 if unit not in us and len(us) >= UNIT_CAP:
                     d, h = d + 1, 0.0
                     continue
-                us.add(unit)
-            room = (VEH_CAP - self.veh.get(d, 0.0)) if queued else float("inf")
-            if room <= EPS:
-                d, h = d + 1, 0.0
-                continue
+                us.add(unit)  # 当天确有作业才占单位名额（A5 第 3 轮第 12 条）
             if start is None:
                 start = (d, h)
             do = min(rem, (day_len - h) * RATE, room)
@@ -166,7 +166,7 @@ def simulate(plans: list, dist) -> tuple:
         _schedule_travel(p, st[p.bid], dist, heap)
     plan_of = {p.bid: p for p in plans}
     while heap:
-        t, bid = heapq.heappop(heap)
+        t, _, bid = heapq.heappop(heap)
         p, s = plan_of[bid], st[bid]
         step = p.steps[s["i"]]
         # 到达 step.node
@@ -226,7 +226,7 @@ def _schedule_travel(p, s, dist, heap):
     s["D"] += d_km
     for g in s["onboard"]:
         s["L"][g] += d_km
-    heapq.heappush(heap, (arr, p.bid))
+    heapq.heappush(heap, (arr, p.start_day, p.bid))  # S9：同时到达按输出批次号，即（出发日, 原批次号），与检查器一致
 
 
 def fmt(t: tuple, year: int = 2026) -> str:

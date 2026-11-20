@@ -14,7 +14,7 @@ import f_engine as fe
 import f_routes as fr
 
 LAST_DAY = 91
-R4_RULE = "phys"  # D15：phys = 物理先后（spec 现行）；batch = β′ 出发日晚于 β 回驻地日（A5 备选读法，敏感性用）
+R4_RULE = "batch"  # 【裁U2】batch = β′ 出发日晚于 β 回驻地日（spec v2.3）；phys = 物理先后（v2.2 的 D15，敏感性用）
 
 
 class Instance:
@@ -118,7 +118,7 @@ class Instance:
                     idle = lg.start[0] - lg.arrive[0] - 1 + (1 if lg.arrive[1] < 1e-9 else 0)
                     if idle > 1:
                         viol.append(("S10排队", b, st.node))
-                if st.rejoin and st.node in left_at and lg.arrive[0] - left_at.pop(st.node) - 1 > 1:
+                if st.rejoin and st.node in left_at and lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
                     viol.append(("S10留置", b, st.node))
                 if st.leave:
                     left_at[st.node] = lg.end[0]

@@ -28,11 +28,13 @@ class Group:
     unload: str
     s: float
     parts: list = field(default_factory=list)  # (块id, 角色)：own / 代领 / 代交 / 领回
+    after: str = ""  # 非空时：本组须在“从该站装车的货组”装车之后才能装（R5：先到 h_k 装代交货，后到 w_k 代领）
 
 
 def batch_groups(assign, batches, blocks, cap):
     """返回 {批次: {gid: Group}}，只含保留的最终批次。"""
     raw = defaultdict(lambda: defaultdict(lambda: [0.0, []]))
+    after = {}
     kept = {k.batch for k in blocks if assign[k.id][0] == "own"}
 
     def add(beta, a, b, s, kid, role):
@@ -60,6 +62,8 @@ def batch_groups(assign, batches, blocks, cap):
             add(beta, k.h, k.w, sx, k.id, "代交")
         elif case in ("R1", "R2", "R5"):
             add(beta, k.w, k.h, sx, k.id, "代领")
+            if case == "R5":
+                after[beta, (k.w, k.h)] = k.h
         elif case == "R3":
             add(beta, k.w, aux, sx, k.id, "代领")
         elif case == "R4":
@@ -69,7 +73,7 @@ def batch_groups(assign, batches, blocks, cap):
     out = {}
     for beta, gs in raw.items():
         assert beta in kept, f"批 {beta} 无自有块却有货"
-        out[beta] = {f"{a}>{b}": Group(f"{a}>{b}", a, b, s, parts) for (a, b), (s, parts) in gs.items()}
+        out[beta] = {f"{a}>{b}": Group(f"{a}>{b}", a, b, s, parts, after.get((beta, (a, b)), "")) for (a, b), (s, parts) in gs.items()}
     return out
 
 
@@ -101,6 +105,9 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
     gids = list(groups)
     s = {g: groups[g].s for g in gids}
     res = []
+    own_set = set(fb.H[unit])
+    # S12：含自有块、从可用队属仓库装车送往外面的货组，须在到访任何外部仓库作业之前装车
+    own_send = {g for g in gids if groups[g].load in own_set and groups[g].unload not in own_set and any(r == "own" for _, r in groups[g].parts)}
     # S15：允许途经的站点集合及其上的最短路
     nodes = sorted({unit} | set(fb.H[unit]) | {g.load for g in groups.values()} | {g.unload for g in groups.values()})
     dc = {(a, b): (0.0 if a == b else float(D.at[a, b])) for a in nodes for b in nodes}
@@ -120,8 +127,10 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
             out.append(fe.Step(cur))
         return out
 
-    def dfs(pos, pending, onboard, left, visits, dist, movT, steps):
+    def dfs(pos, pending, onboard, left, visits, dist, movT, steps, ext=False):
         if dist > max_km + 1e-9:
+            return
+        if ext and pending & own_send:
             return
         if not pending and not onboard and not left:
             d = dc[pos, unit]
@@ -132,6 +141,8 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
         for n in sorted(cand):
             if n == pos or visits.get(n, 0) >= MAX_VISIT:
                 continue
+            if n in left and n != next(reversed(left)):
+                continue  # S11：多站留置按相反顺序汇合
             ob, lf, mT = set(onboard), dict(left), movT
             rejoin = n in lf
             if rejoin:
@@ -152,6 +163,11 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
                     continue
                 if not (rejoin or un or S):
                     continue
+                if ext and set(S) & own_send:
+                    continue
+                if any(groups[g].after and any(groups[x].load == groups[g].after for x in pending if x not in S) for g in S):
+                    continue  # R5：代交货尚未在 h_k 装车
+                ext2 = ext or (n.startswith("W") and n not in own_set)
                 Sset = set(S)
                 pend2 = pending - Sset
                 base = dict(node=n, unload={g: s[g] for g in sorted(un)}, load={g: s[g] for g in S}, rejoin=rejoin)
@@ -167,7 +183,7 @@ def enumerate_routes(unit, T, groups, D, max_km=MAX_KM, allow_leave=True):
                     if L:
                         lf2[n] = Lset
                     for d, pre in legs:
-                        dfs(n, pend2, (ob | Sset) - Lset, lf2, v2, dist + d, mT - c, steps + pre + [fe.Step(leave=sorted(L), **base)])
+                        dfs(n, pend2, (ob | Sset) - Lset, lf2, v2, dist + d, mT - c, steps + pre + [fe.Step(leave=sorted(L), **base)], ext2)
 
     dfs(unit, frozenset(gids), set(), {}, {}, 0.0, T, [])
     return res
@@ -181,7 +197,8 @@ def evaluate(bid, unit, T, steps, D, start_day=10):
     left_at = {}
     for st, lg in zip(steps, r.logs):
         if st.rejoin and st.node in left_at:
-            if lg.arrive[0] - left_at.pop(st.node) - 1 > 1:
+            # S10：留置车整日闲置天数；汇合车队 16:00 才到时，当天也算闲置
+            if lg.arrive[0] - left_at.pop(st.node) - 1 + (1 if lg.arrive[1] >= fe.DAY_H - 1e-9 else 0) > 1:
                 ok = False
         if st.leave:
             left_at[st.node] = lg.end[0]
