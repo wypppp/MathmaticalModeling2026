@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 rows = []
 
 # 复核状态：A = 已由 GPT 对当前版本复核；B = GPT 复核过上一版、当前版只用其脚本或检查器验证；C = 单方结果
-STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "B", "B", "C"  # spec v2.6（Y1 选 B 版）：问题 2–4 为新版，仅经本方检查器与 GPT 第五批脚本复跑，待 GPT 第六批
+STATUS_P1, STATUS_P2, STATUS_P34, STATUS_X = "A", "A", "B", "C"  # spec v2.6：问题 2 的四级目标、3 个并列指派及其 N/P/E/仓库对经 GPT 第六批第 1 项独立确认（R45）；问题 3、4 新版待第六批第 2、3 项
 
 
 def put(key, val, src, ev, st, note=""):
@@ -59,10 +59,10 @@ for row, tag in [("下界（各批孤立最优）", "lb"), ("基线", "base"), (
 
 # spec v2.6 Y1/Y2：问题 2 的并列最优指派与各自的问题 3 结果
 t2 = pd.read_csv(R / "p2/ties.csv")
-put("P2.ties.n", len(t2), "p2/ties.csv", "R43", STATUS_P2, "四级目标同值的并列最优指派个数（V38）")
+put("P2.ties.n", len(t2), "p2/ties.csv", "R43/R45", STATUS_P2, "四级目标同值的并列最优指派个数（V38；GPT 独立枚举一致）")
 for r in t2.itertuples():
     for k in ("N", "P", "E", "pairs"):
-        put(f"P2.tie{r.tie}.{k}", getattr(r, k), "p2/ties.csv", "R43", STATUS_P2)
+        put(f"P2.tie{r.tie}.{k}", getattr(r, k), "p2/ties.csv", "R43/R45", STATUS_P2)
 t3 = pd.read_csv(R / "p3/ties.csv")
 for r in t3.itertuples():
     for k in ("tau", "L", "delta", "V", "D", "score", "lb_tau", "lb_L", "base_tau", "base_L", "base_delta"):
