@@ -52,6 +52,7 @@ def prep(deltas):
     R, insts, pick, inc, ev, z, V = c3.setup()
     WT, WL, WD = c2.WT, c2.WL, c2.WD
     vecdata, tasks, excluded = {}, [], []
+    skip = set(Path(os.environ["CERT4_SKIP"]).read_text(encoding="utf-8").split()) if os.environ.get("CERT4_SKIP") else set()
     for t in sorted(insts):
         inst = insts[t]
         p = c3.plan(inst, z)
@@ -63,6 +64,8 @@ def prep(deltas):
             if dlt not in deltas:
                 continue
             if os.environ.get("CERT4_VECS") and f"{t}:{vi}" not in os.environ["CERT4_VECS"].split(","):
+                continue
+            if f"{t}:{vi}" in skip:  # 已由 f_p3_cert3 判定的向量（CERT4_SKIP 指向每行一个 t:vi 的文件）
                 continue
             if E < 0:
                 excluded.append(dict(tie=t, vec=vi, delta=dlt, why="预算为负"))
