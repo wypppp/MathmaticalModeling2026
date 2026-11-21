@@ -36,3 +36,5 @@ python review/gpt_v26/verify.py
 ```
 
 `solutions.json` 保存按求解顺序产生的完整指派；`block_comparison.csv` 按对照编号和块号给出 270 行结果。
+
+第 2、3 项基于 ca84f361 的独立结论、逐站台账与复跑方式见[工作簿与共用标尺复核](workbook_review.md)。

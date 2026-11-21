@@ -12,7 +12,7 @@ import glob
 import math
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import openpyxl
@@ -24,6 +24,8 @@ H = {"U8": ["WO"], "U11": ["WO", "WS"], "U12": ["WO"], "U6": ["WP"], "U9": ["WP"
 UNITS = [f"U{i}" for i in range(1, 13)]
 TEAM = {"WO", "WP", "WQ", "WR", "WS", "WT", "WU"}
 EPS = 1e-9
+S10_LIMIT = dt.timedelta(hours=24)  # 裁 Z3（spec v2.8）：等待 ≤ 24 小时（连续时钟）；None = v2.7 的整日口径
+OWN_CAP = True  # 裁 Z2（2026-11-21）：执行单位在自用队属仓的作业也计日容量（3 支、20 台）；False = 旧假设 H13
 TOL = dt.timedelta(seconds=61)
 
 
@@ -215,6 +217,9 @@ def main():
         dj_load = defaultdict(list)  # R5：(属主, 节点) -> 代交货装车的站序
         dl_ext = []  # (属主, 货物, 卸货节点, 装车站序)
         act_nodes = {x} | own | {s_["node"] for s_ in bt["stops"] if s_["segs"]}
+        for n_, k_ in Counter(s_["node"] for s_ in bt["stops"] if s_["node"].startswith("W")).items():
+            if k_ > 2:
+                V("S15", b, f"{n_} 到访 {k_} 次（每站至多 2 次）")  # Kimi 审计一-5
         for i, st in enumerate(bt["stops"]):
             n = st["node"]
             if n not in act_nodes:
@@ -296,7 +301,8 @@ def main():
                         else:
                             recv += e1
                 if n not in own and n != x:
-                    if sg["flag"] == 0 and "领回" not in sg["note"]:
+                    # W_β = 被执行块的 w_k（自有、代领的装车仓、代交的送达仓）∖ H(x)；R5/R7 专程取代交货的仓库与 R4 领回不计（spec §4.1；Kimi 审计一-4）
+                    if (sg["flag"] == 0 and "领回" not in sg["note"]) or (sg["flag"] == 1 and sg["io"] == "发") or (sg["flag"] == -1 and sg["io"] == "收"):
                         targets.add(n)
                     else:
                         special.add(n)
@@ -314,7 +320,7 @@ def main():
                 V("S14", b, f"离开 {n} 时装载 {load_now:.3f} > 行驶车队 {movT} 辆")
             c = ceil_(su) + ceil_(sl)
             st["_c"], st["_su"], st["_sl"] = c, su, sl
-            queued = n.startswith("W")  # S9：所有仓库先到先服务；S8 的日容量只算 H(x) 以外的仓库
+            queued = n.startswith("W")  # S9：所有仓库先到先服务；S8 的日容量算一切仓库（裁 Z2 删去 H13；OWN_CAP=False 为旧口径）
             if c > 0 and queued:
                 services[n].append(st | dict(_b=b, _u=x, _idx=i, _own=n in own))
             if c > 0 and not queued:
@@ -358,7 +364,7 @@ def main():
                 if hours(t) >= 8 - 1e-6:
                     t = mk(day_of(t) + 1, 0, t.year)
                 d = day_of(t)
-                if not s["_own"]:
+                if OWN_CAP or not s["_own"]:
                     if s["_u"] not in units_day[d] and len(units_day[d]) >= 3:
                         t = mk(d + 1, 0, t.year)
                         continue
@@ -367,13 +373,17 @@ def main():
                 do = min(rem, (8 - hours(t)) * 2.5)
                 t += dt.timedelta(hours=do / 2.5)
                 rem -= do
-                if not s["_own"]:
+                if OWN_CAP or not s["_own"]:
                     veh_day[d] += do
             free = t
             s["_end_q"], s["_first"] = t, first
-            idle = day_of(first) - day_of(s["arrive"]) - 1 + (1 if hours(s["arrive"]) < 1e-6 and day_of(first) > day_of(s["arrive"]) else 0)
-            if idle > 1:
-                V("S10", s["_b"], f"在 {w} 排队整日等待 {idle} 天")
+            if S10_LIMIT is not None:
+                if first - s["arrive"] > S10_LIMIT + TOL:
+                    V("S10", s["_b"], f"在 {w} 从到达到开工等待 {(first - s['arrive']).total_seconds() / 3600:.2f} 小时 > 24")
+            else:
+                idle = day_of(first) - day_of(s["arrive"]) - 1 + (1 if hours(s["arrive"]) < 1e-6 and day_of(first) > day_of(s["arrive"]) else 0)
+                if idle > 1:
+                    V("S10", s["_b"], f"在 {w} 排队整日等待 {idle} 天")
         for d, v in veh_day.items():
             if v > 20 + 1e-6:
                 V("S8", None, f"{w} 第 {d} 天 {v:.1f} 台次")
@@ -408,10 +418,14 @@ def main():
                 # 包 3 第 3 条：留置车闲置到汇合站重新开工（排队也算），无作业时到离开
                 resume = firstq.get((b, i)) if st.get("_c", 0) > 0 else exp_dep  # 无作业时用按规则推算的离开时刻（不信表中的离开时刻）
                 resume = max(resume or st["arrive"], st["arrive"])
-                if day_of(resume) - left_day.pop(st["node"]) - 1 + (1 if hours(resume) >= 8 - 1e-6 else 0) > 1:
+                lt = left_day.pop(st["node"])
+                if S10_LIMIT is not None:
+                    if resume - lt > S10_LIMIT + TOL:
+                        V("S10", b, f"留置在 {st['node']} 的车从装完到汇合后重新开工（无作业为离开）等待 {(resume - lt).total_seconds() / 3600:.2f} 小时 > 24")
+                elif day_of(resume) - day_of(lt) - 1 + (1 if hours(resume) >= 8 - 1e-6 else 0) > 1:
                     V("S10", b, f"留置在 {st['node']} 的车整日等待超过 1 天（算到汇合后重新开工）")
             if any(sg["follow"] == "否" for sg in st["segs"]):
-                left_day[st["node"]] = day_of(end)
+                left_day[st["node"]] = end  # 留置站作业结束时刻
         s_day, e_day = bt["_start"], day_of(stops[-1]["arrive"])
         if e_day > 91 or s_day < 1:
             V("S1", b, "超出 4/1–6/30")
@@ -512,8 +526,9 @@ def main():
         ok = False
         if len(diff) == 2:
             (n1, v1), (n2, v2) = diff.items()
-            if abs(v1 + v2) < 1e-6 and n1 in TEAM and n2 in TEAM and min(D[(key[0], n1)], D[(key[0], n2)]) <= 150:
-                ok = True  # 货落在距货主驻地 ≤150 km 的另一队属仓库（R3，货主自取）
+            sub = n1 if v1 < 0 else n2  # 实际多落货的替代仓库（净流入多于需求的一侧）
+            if abs(v1 + v2) < 1e-6 and n1 in TEAM and n2 in TEAM and D[(key[0], sub)] <= 150:
+                ok = True  # 货落在距货主驻地 ≤150 km 的另一队属仓库（R3，货主自取）；只判替代仓库一侧（Kimi 审计一-3）
         if not ok:
             n_mis += 1
             V("守恒", None, f"{key} 净流出不符 {diff}")

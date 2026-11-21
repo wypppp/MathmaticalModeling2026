@@ -149,7 +149,9 @@ def plan_metrics(tag, assign, batches, blocks, cap, D, start_of, order_of):
         lo, hi = max(1, bt.a - 6), bt.e
         out.append(dict(batch=b, unit=bt.unit, T=srow[b]["T"], N=srow[b]["N"], P=srow[b]["P"], N_tab=bt.N0, P_tab=bt.P0, targets=srow[b]["targets"],
                         n_targets=srow[b]["n_targets"], a=bt.a, e=bt.e, start=start_of[b], end_sim=r.end_day, tau_sim=r.tau, D=r.D, Lbar=r.Lbar,
-                        veh_km=r.veh_km, delta=abs(start_of[b] - bt.a), in_window=lo <= start_of[b] <= hi, route=meta[b][2], unload_order_gap_km=meta[b][1], overload=";".join(r.flags)))
+                        veh_km=r.veh_km, delta=abs(start_of[b] - bt.a), in_window=lo <= start_of[b] <= hi, route=meta[b][2], unload_order_gap_km=meta[b][1], overload=";".join(r.flags),
+                        max_wait_h=max([fr.clock_h(lg.arrive, lg.start) for lg in r.logs if lg.c_unload + lg.c_load > 0] or [0.0]),
+                        s10_viol=sum(1 for lg in r.logs if lg.c_unload + lg.c_load > 0 and fr.queue_violates(lg))))
     df = pd.DataFrame(out)
     df.to_csv(OUT / f"batches_{tag}.csv", index=False, encoding="utf-8-sig")
     veh_over = sum(1 for w in whs.values() for d, v in w.veh.items() if v > 20 + 1e-6)
@@ -157,7 +159,7 @@ def plan_metrics(tag, assign, batches, blocks, cap, D, start_of, order_of):
                 代领代交等效车数=tot["A"], 失衡度=tot["E"], 批次仓库对=int(df.n_targets.sum()), 调运总里程=df.D.sum(), 载货总行驶距离=df.Lbar.sum(),
                 车公里=df.veh_km.sum(), 执行总时间_回放=int(df.tau_sim.sum()), 开始偏离=int(df.delta.sum()), 越窗批次数=int((~df.in_window).sum()),
                 超2000km批次=int((df.D > 2000).sum()), 最大里程=df.D.max(),
-                卸货次序取最长时的总里程=df.D.sum() + df.unload_order_gap_km.sum(), 按表中顺序会超载的批次=int((df.overload.fillna("") != "").sum()))
+                卸货次序取最长时的总里程=df.D.sum() + df.unload_order_gap_km.sum(), 按表中顺序会超载的批次=int((df.overload.fillna("") != "").sum()), 等待超24小时的批次=int((df.s10_viol > 0).sum()), 最长等待_小时=float(df.max_wait_h.max()))
     return summ, df, flow
 
 

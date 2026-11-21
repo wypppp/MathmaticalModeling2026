@@ -60,9 +60,13 @@ class Instance:
             base = min(simple or allr, key=lambda e: (e["D"], e["tau"], e["Lbar"]))
             nd = []
             for a in allr:
+                # 帕累托剪枝只在“孤立回放满足 S10”相同的路线之间比较：孤立违反 S10 的路线可能在整体回放中也违反，
+                # 不能让它支配孤立合规的路线（v2.8 关闭孤立过滤后，否则会剪掉唯一可行的路线）
+                grp = [c for c in allr if c.get("iso_s10", True) == a.get("iso_s10", True)]
                 if not any((c["tau"] <= a["tau"] and c["Lbar"] <= a["Lbar"] + 1e-9 and c["D"] <= a["D"] + 1e-9) and
-                           (c["tau"] < a["tau"] or c["Lbar"] < a["Lbar"] - 1e-9 or c["D"] < a["D"] - 1e-9) for c in allr):
-                    if not any(abs(c["tau"] - a["tau"]) < 1e-9 and abs(c["Lbar"] - a["Lbar"]) < 1e-6 and abs(c["D"] - a["D"]) < 1e-6 for c in nd):
+                           (c["tau"] < a["tau"] or c["Lbar"] < a["Lbar"] - 1e-9 or c["D"] < a["D"] - 1e-9) for c in grp):
+                    if not any(abs(c["tau"] - a["tau"]) < 1e-9 and abs(c["Lbar"] - a["Lbar"]) < 1e-6 and abs(c["D"] - a["D"]) < 1e-6
+                               and c.get("iso_s10", True) == a.get("iso_s10", True) for c in nd):
                         nd.append(a)
             if base not in nd:
                 nd.append(base)
@@ -101,6 +105,7 @@ class Instance:
         """返回 dict：feasible、违例列表、三项目标、V、逐批结果。"""
         res, whs = fe.simulate(self.plans(sol), self.D)
         viol = []
+        viol_ret = []  # 只在“留置算到车队回站”口径下才违反的留置（主口径之外的敏感性）
         active = defaultdict(lambda: defaultdict(int))
         for b in self.ids:
             r, (ri, day) = res[b], sol[b]
@@ -117,14 +122,16 @@ class Instance:
             steps = self.cands[b][ri]["steps"]
             left_at = {}
             for st, lg in zip(steps, r.logs):
-                if (st.load or st.unload) and lg.start[0] > lg.arrive[0]:
-                    idle = lg.start[0] - lg.arrive[0] - 1 + (1 if lg.arrive[1] < 1e-9 else 0)
-                    if idle > 1:
-                        viol.append(("S10排队", b, st.node))
-                if fr.LEAVE_WAIT_LIMIT and st.rejoin and st.node in left_at and fr.leave_idle(left_at.pop(st.node), lg) > 1:
-                    viol.append(("S10留置", b, st.node))
+                if (st.load or st.unload) and fr.queue_violates(lg):
+                    viol.append(("S10排队", b, st.node))
+                if fr.LEAVE_WAIT_LIMIT and st.rejoin and st.node in left_at:
+                    le = left_at.pop(st.node)
+                    if fr.hold_violates(le, lg):
+                        viol.append(("S10留置", b, st.node))
+                    if fr.S10_HOURS is not None and fr.hold_violates(le, lg, "return"):
+                        viol_ret.append(("S10留置", b, st.node))  # 敏感性：留置算到车队回站
                 if st.leave:
-                    left_at[st.node] = lg.end[0]
+                    left_at[st.node] = lg.end
         for u, days in active.items():
             if max(days.values()) > 2:
                 viol.append(("S4", u))
@@ -141,7 +148,9 @@ class Instance:
         V = sum(1 for (b0, be) in self.pairs if not (max(1, self.batches[b0].a - 6) <= sol[be][1] <= self.batches[b0].e))
         Dtot = sum(res[b].D for b in self.ids)
         vk = sum(res[b].veh_km for b in self.ids)
-        return dict(feasible=not viol, viol=viol, tau=tau, L=L, delta=delta, V=V, D=Dtot, veh_km=vk, res=res, whs=whs)
+        other = [v for v in viol if v[0] != "S10留置"]
+        return dict(feasible=not viol, feasible_ret=not other and not viol_ret, viol=viol, tau=tau, L=L, delta=delta, V=V, D=Dtot,
+                    veh_km=vk, res=res, whs=whs)
 
     # ---------- 基线 ----------
     def baseline(self):

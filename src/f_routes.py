@@ -21,6 +21,12 @@ MAX_VISIT = 2
 MAX_KM = 2000.0
 LEAVE_WAIT_LIMIT = True  # G14：留置车也受“最多等待 1 天”限制；False 为敏感性（留置不受限）
 ALLOW_VIA = False  # 【裁X1】每段按附件 1 的直达距离，路线中只出现作业站（及汇合站、终点驻地）；True 为 R33 及以前的“途经”读法（敏感性）
+S10_HOURS = 24.0  # 【裁Z3】等待 ≤ 24 小时（连续时钟）；None = v2.7 及以前的“整日闲置 ≤ 1 天”（敏感性）
+S10_TOL = 1e-6
+HOLD_END = "restart"  # 【裁W3/Z3】留置算到汇合站重新开工（无作业时为离开）；"return" = 算到车队回到该站（敏感性）
+ISO_S10_FILTER = False  # 【裁 v2.8 候选集】False：候选路线不按孤立回放的 S10 过滤（排队可能使其合规），S10 只在整体回放判；True = v2.7 及以前
+if __import__("os").environ.get("F_SPEC") == "v2.7":  # 旧证书（v2.7 实例）续跑时必须设此变量，回到整日口径与孤立过滤
+    S10_HOURS, ISO_S10_FILTER = None, True
 LEAVE_MODE = "literal"  # 【裁X2】literal：留置时车上全部已装车辆留下、其余空车继续（件 7 注 7、正文第 78 行）；"loaded_here"：只留本站刚装的货的任一子集（R33 及以前）
 
 
@@ -207,6 +213,35 @@ def enumerate_routes(unit, T, groups, D, max_km=None, allow_leave=True):
     return res
 
 
+def clock_h(t0, t1):
+    """两个引擎时刻 (日, 8:00 起的小时) 之间的连续时钟小时数（夜间计入）。"""
+    return (t1[0] - t0[0]) * 24.0 + (t1[1] - t0[1])
+
+
+def hold_end_time(lg, mode=None):
+    """留置等待的终点：restart = 汇合站重新开工（无作业时为离开）；return = 车队回到该站。"""
+    mode = mode or HOLD_END
+    if mode == "return":
+        return lg.arrive
+    return lg.start if (lg.c_unload + lg.c_load) > 0 else lg.depart
+
+
+def hold_violates(left_end, lg, mode=None):
+    """S10 留置：left_end 为留置站作业结束时刻 (日, 小时)。"""
+    if S10_HOURS is None:
+        return leave_idle(left_end[0], lg) > 1
+    return clock_h(left_end, hold_end_time(lg, mode)) > S10_HOURS + S10_TOL
+
+
+def queue_violates(lg):
+    """S10 排队：到达至开始装卸。"""
+    if S10_HOURS is None:
+        if lg.start[0] <= lg.arrive[0]:
+            return False
+        return lg.start[0] - lg.arrive[0] - 1 + (1 if lg.arrive[1] < 1e-9 else 0) > 1
+    return clock_h(lg.arrive, lg.start) > S10_HOURS + S10_TOL
+
+
 def leave_idle(left_end_day, lg):
     """S10：留置车的整日闲置天数 = 留置结束日之后、到汇合站重新开工（无作业时为离开）之前，整天既不作业也不行驶的天数。
     汇合后排队的时间也算在内（Gemini 包 3 第 3 条：原先只算到汇合车队到达）；重新开工恰在 16:00 及以后时当天也算闲置。"""
@@ -219,14 +254,17 @@ def evaluate(bid, unit, T, steps, D, start_day=10):
     plan = fe.Plan(bid, unit, start_day, T, steps, tuple(fb.H[unit]))
     r = fe.simulate([plan], D)[0][bid]
     ok = not r.flags
+    iso_s10 = True  # 孤立回放是否满足 S10（不论是否用于过滤，都记录；剪枝时按它分组）
     left_at = {}
     for st, lg in zip(steps, r.logs):
         if st.rejoin and st.node in left_at:
-            if LEAVE_WAIT_LIMIT and leave_idle(left_at.pop(st.node), lg) > 1:
-                ok = False
+            if LEAVE_WAIT_LIMIT and hold_violates(left_at.pop(st.node), lg):
+                iso_s10 = False
         if st.leave:
-            left_at[st.node] = lg.end[0]
-    return dict(D=r.D, Lbar=r.Lbar, veh_km=r.veh_km, tau=r.tau, ok=ok, res=r, n_leave=sum(bool(st.leave) for st in steps))
+            left_at[st.node] = lg.end
+    if ISO_S10_FILTER and not iso_s10:
+        ok = False
+    return dict(D=r.D, Lbar=r.Lbar, veh_km=r.veh_km, tau=r.tau, ok=ok, iso_s10=iso_s10, res=r, n_leave=sum(bool(st.leave) for st in steps))
 
 
 def candidates(bid, unit, T, groups, D, max_km=None, allow_leave=True):

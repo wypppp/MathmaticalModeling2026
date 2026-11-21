@@ -89,7 +89,7 @@ def main():
     batches, blocks = fb.build(4)
     summ = []
     variants = [("main", {}), ("noR4", dict(allow_R4=False)), ("shared_only", dict(only_shared=True)),
-                ("c6_literal", dict(levels=("B", "A", "V0"), c6="maximal")), ("near149", dict(near=149)),
+                ("c6_literal", dict(levels=("B", "A", "T"), c6="maximal")), ("near149", dict(near=149)),
                 ("norev", dict(allow_rev=False))]
     keep, forbids = {}, {}
     for tag, kw in variants:
@@ -104,34 +104,42 @@ def main():
         keep[tag] = (r, routes, rows, tot, flow)
         forbids[tag] = forbid
         print(tag, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in summ[-1].items()})
-    # 并列最优（spec v2.6 Y1）：四级同值的全部指派；第 5 级（问题 3 合成目标最小）由 f_run_p3.py 选出，写入 p3/choice.csv
-    rt = f_p2.solve(batches, blocks, cap, D, forbid=forbids["main"], alternatives=50)
+    # 【裁Z5，spec v2.8】四级 (U9, B, A, ΣT) 并列的全部指派（no-good 割枚举到不可行），再按 (ΣN, ΣP) 取唯一者；不含任何时间信息
+    for f in OUT.glob("assign_tie*.csv"):
+        f.unlink()  # 旧版并列文件（v2.6 的 3 个）会被 f_run_p3 当作并列指派读入，先清除
+    LIM = 2000
+    rt = f_p2.solve(batches, blocks, cap, D, forbid=forbids["main"], alternatives=LIM)
     assert rt["assign"] == keep["main"][0]["assign"], "带 forbid 重解的主解与主流程不同"
     ties = [rt["assign"]] + rt["alts"]
-    sigs = [assign_sig(a) for a in ties]
-    choice = ROOT / "results" / "F" / "p3" / "choice.csv"
-    pick = 0
-    if choice.exists():
-        want = pd.read_csv(choice).iloc[0]["sig"]
-        assert want in sigs, "p3/choice.csv 的指派不在当前并列集合中，需先重跑 f_run_p3.py"
-        pick = sigs.index(want)
-    trow = []
+    assert len(rt["alts"]) < LIM, "并列解枚举未穷尽"
+    trow, cand = [], []
     for k, a in enumerate(ties):
-        rk = dict(keep["main"][0], assign=a)  # 保留求解统计，只换指派
+        rows_k, tot_k, _ = f_p2.summarize(a, batches, blocks, cap)
         routes_k = check_routes(a, batches, blocks, cap, D)
-        assert all(v["cands"] for v in routes_k.values()), f"并列指派 {k} 有批次无合规路线"
-        rows_k, tot_k, flow_k = ledger(f"tie{k}", rk, routes_k, batches, blocks, cap)
-        trow.append(dict(tie=k, sig=sigs[k], chosen=(k == pick), N=tot_k["N"], P=tot_k["P"], T=tot_k["T"], A=tot_k["A"], pairs=tot_k["pairs"], E=tot_k["E"],
-                         diff_blocks=" ".join(str(b) for b in sorted(a) if a[b] != ties[0][b])))
-        if k == pick and k != 0:  # 主解改为第 5 级选中的并列指派
-            rows, tot, flow = ledger("main", rk, routes_k, batches, blocks, cap)
-            summ[0].update(N=tot["N"], P=tot["P"], T=tot["T"], A=tot["A"], pairs=tot["pairs"], E=tot["E"],
-                           max_minD=max(x["min_D"] for x in rows), sum_min_tau=sum(x["min_tau"] for x in rows),
-                           sum_min_Lbar=sum(x["min_Lbar"] for x in rows))
-            keep["main"] = (rk, routes_k, rows, tot, flow)
+        ok = all(v["cands"] for v in routes_k.values())
+        trow.append(dict(tie=k, sig=assign_sig(a), routable=ok, N=tot_k["N"], P=tot_k["P"], T=tot_k["T"], A=tot_k["A"], pairs=tot_k["pairs"], E=tot_k["E"],
+                         V0=None, diff_blocks=" ".join(str(b) for b in sorted(a) if a[b] != ties[0][b])))
+        assert tot_k["T"] == rt["stats"]["T"], f"并列指派 {k} 的 ΣT={tot_k['T']} 与模型 {rt['stats']['T']} 不符（取整容差）"
+        if ok:
+            cand.append(((tot_k["N"], tot_k["P"]), k))
+    best = min(c[0] for c in cand)
+    picks = [k for c, k in cand if c == best]
+    assert len(picks) == 1, f"(ΣN, ΣP) 仍有 {len(picks)} 个并列：{picks}，需补规则"
+    pick = picks[0]
+    for t in trow:
+        t["chosen"] = t["tie"] == pick
+    a = ties[pick]
+    rk = dict(keep["main"][0], assign=a)
+    routes_k = check_routes(a, batches, blocks, cap, D)
+    ledger("tie0", rk, routes_k, batches, blocks, cap)  # 问题 3 只读这一个
+    rows, tot, flow = ledger("main", rk, routes_k, batches, blocks, cap)
+    summ[0].update(N=tot["N"], P=tot["P"], T=tot["T"], A=tot["A"], pairs=tot["pairs"], E=tot["E"],
+                   max_minD=max(x["min_D"] for x in rows), sum_min_tau=sum(x["min_tau"] for x in rows),
+                   sum_min_Lbar=sum(x["min_Lbar"] for x in rows))
+    keep["main"] = (rk, routes_k, rows, tot, flow)
     pd.DataFrame(trow).to_csv(OUT / "ties.csv", index=False, encoding="utf-8-sig")
     summ[0]["n_ties"], summ[0]["tie_chosen"] = len(ties), pick
-    print(f"并列最优指派 {len(ties)} 个；主解取第 {pick} 个（{'按 p3/choice.csv' if choice.exists() else '尚无问题 3 的选择，暂取求解器给出的第 0 个'}）")
+    print(f"四级并列 {len(ties)} 个（已穷尽），按 (ΣN, ΣP) 唯一取第 {pick} 个：N={tot['N']} P={tot['P']} T={tot['T']}")
     # 折衷曲线：固定批次数，最小化代领代交量
     r0 = keep["main"][0]
     Bmin = r0["stats"]["B"]

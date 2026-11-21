@@ -78,12 +78,14 @@ def options(k, batches, blocks, cap, D, allow_R4=True, only_shared=False, near=N
 
 
 def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, allow_rev=True,
-          forbid=(), fix_batches=None, levels=("U9", "B", "A", "V0"), max_extra=3, verbose=False, c6="max", allow_R3=True, near_all=False, alternatives=0):
+          forbid=(), fix_batches=None, levels=("U9", "B", "A", "T"), max_extra=3, verbose=False, c6="max", allow_R3=True, near_all=False, alternatives=0):
     """返回 dict(assign={块id: 选项}, stats=..., status=...)。forbid：若干选项集合，每个集合不得同时全选。
     fix_batches：把批次数固定为给定值（做折衷曲线时用）；此时 levels 中的 'B' 被跳过。"""
     m = gp.Model("p2")
     m.Params.OutputFlag = 1 if verbose else 0
     m.Params.MIPGap = 0.0
+    m.Params.FeasibilityTol = 1e-9  # 运力上取整对容差敏感（Z5 的 ΣT 级）；求解后再逐批与 summarize 核对
+    m.Params.IntFeasTol = 1e-9
     opts = {k.id: [("own",)] + options(k, batches, blocks, cap, D, allow_R4, only_shared, near, allow_rev, allow_R3, near_all) for k in blocks}
     z = {(kid, o): m.addVar(vtype="B") for kid, os in opts.items() for o in os}
     y = {b: m.addVar(vtype="B") for b in batches}
@@ -130,10 +132,16 @@ def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, 
                 mates = [z[j.id, oo] for j in blocks if j.owner == k.owner and j.dir == "交" and j.h == k.h
                          for oo in opts[j.id][1:] if oo[0] == "T" and oo[1] == beta and oo[2] in ("R7", "R8")]
                 m.addConstr(v <= gp.quicksum(mates))
+    Tv = {}
     for b, bt in batches.items():
         capT = min(30, bt.T0 + max_extra)
         m.addConstr(gp.quicksum(c * v for c, v in recv[b]) <= capT * y[b])
         m.addConstr(gp.quicksum(c * v for c, v in send[b]) <= capT * y[b])
+        # 【裁Z5】运力 T_β = ⌈max(接领和, 送交和)⌉ 的整数表达：T ≥ 两侧和、T ≤ 上限·y；在最小化 ΣT 时取到上取整（求解后逐批与 summarize 核对）
+        Tv[b] = m.addVar(vtype="I", lb=0, ub=capT)
+        m.addConstr(Tv[b] >= gp.quicksum(c * v for c, v in recv[b]))
+        m.addConstr(Tv[b] >= gp.quicksum(c * v for c, v in send[b]))
+        m.addConstr(Tv[b] <= capT * y[b])
     if c6 == "maximal":
         # C6 的字面读法：U9 保留的块，不得存在“U6 某批次仍保留着去该仓库的自有块”的情形（忽略运力，偏严）
         for k in blocks:
@@ -184,7 +192,7 @@ def solve(batches, blocks, cap, D, allow_R4=True, only_shared=False, near=NEAR, 
         if lv == "B" and fix_batches is not None:
             stats["B"] = fix_batches
             continue
-        expr, sense = {"U9": (u9, gp.GRB.MAXIMIZE), "B": (nB, gp.GRB.MINIMIZE), "A": (A, gp.GRB.MINIMIZE), "V0": (V0, gp.GRB.MINIMIZE),
+        expr, sense = {"U9": (u9, gp.GRB.MAXIMIZE), "B": (nB, gp.GRB.MINIMIZE), "A": (A, gp.GRB.MINIMIZE), "V0": (V0, gp.GRB.MINIMIZE), "T": (gp.quicksum(Tv.values()), gp.GRB.MINIMIZE),
                        "W": (Wp, gp.GRB.MINIMIZE)}[lv]
         m.setObjective(expr, sense)
         m.optimize()

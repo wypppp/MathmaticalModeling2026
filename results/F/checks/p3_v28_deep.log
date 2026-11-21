@@ -1,0 +1,4 @@
+seed 0 best key (np.float64(1.027162205173), 11, 31223.0) 189s
+seed 1 best key (np.float64(1.027162205173), 11, 31223.0) 221s
+seed 2 best key (inf,) 160s
+seed 3 best key (np.float64(1.027162205173), 11, 31223.0) 111s

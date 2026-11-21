@@ -38,15 +38,30 @@ def main():
     evb = inst3.evaluate(base)
     r_ = pd.read_csv(ROOT / "results" / "F" / "p3" / "ref.csv").iloc[0]  # spec v2.6 Y2：与问题 3 同一共用标尺
     ref3 = dict(l=(r_.l_tau, r_.l_L, r_.l_delta), u=(r_.u_tau, r_.u_L, r_.u_delta))
-    sol3, _ = inst3.improve(base, ref3)
+    # 起点用问题 3 的主方案本身（v2.8：剪枝候选上的坐标下降重现不了它）：把主方案的路线映射进剪枝实例，缺的补入
+    inst_full = f_p3.Instance(a3, batches, blocks, cap, D)
+    m3 = pd.read_csv(ROOT / "results" / "F" / "p3" / "batches_main.csv")
+    sol3 = {}
+    for r in m3.itertuples():
+        b = int(r.batch)
+        c_main = inst_full.cands[b][int(r.route)]
+        j = next((i for i, c in enumerate(inst3.cands[b]) if c["steps"] == c_main["steps"]), None)
+        if j is None:
+            inst3.cands[b] = inst3.cands[b] + [c_main]
+            j = len(inst3.cands[b]) - 1
+        sol3[b] = (j, int(r.start))
     ev3 = inst3.evaluate(sol3)
+    s3_ref = pd.read_csv(ROOT / "results" / "F" / "p3" / "summary.csv")
+    main3 = s3_ref[s3_ref.name.str.startswith("主路线")].iloc[0]
+    assert ev3["feasible"] and ev3["tau"] == main3.tau and abs(ev3["L"] - main3.L) < 1e-6 and ev3["delta"] == main3.delta, "问题 3 主方案在剪枝实例上未能重现"
     _, tot3, _ = f_p2.summarize(a3, batches, blocks, cap)
     nB = tot3["B"]
     rW = f_p2.solve(batches, blocks, cap, D, fix_batches=nB, levels=("U9", "W", "A"))
     Wmin = rW["stats"]["W"]
     print(f"问题 3 方案：批次 {nB} 天 {ev3['tau']} L {ev3['L']:.3f} 偏离 {ev3['delta']} E {tot3['E']:.4f} 仓库对 {tot3['pairs']}；{nB} 批下仓库对最小 {Wmin}")
     P = f_p4.P4(batches, blocks, cap, D, nB, ref3, (0.0, tot3["E"]), (Wmin, tot3["pairs"]), u9_min=5)
-    P.cache.update(inst3.__dict__.get("_dummy", {}))
+    for b in inst3.ids:  # 补入了主方案路线的候选写入缓存，改派后生成的实例对未变批次共用
+        P.cache[inst3.sig[b]] = (inst3.cands[b], inst3.base_idx[b], inst3.pareto[b])
     runs = []
     # 起点一：问题 3 的方案
     SEEDS = range(6)
@@ -95,6 +110,9 @@ def main():
     print(sdf.T.to_string())
     # 台账与结果表
     dump3("main", inst, sol, ev)
+    import pickle
+    with open(OUT / "search_end.pkl", "wb") as f:  # 搜索终点按路线步骤保存（剪枝实例的编号含补入的路线，reroute 不能按编号映射）
+        pickle.dump({b: (inst.cands[b][sol[b][0]]["steps"], sol[b][1]) for b in inst.ids}, f)
     import shutil
     shutil.copy(OUT / "batches_main.csv", OUT / "batches_search.csv")  # 改派搜索终点（剪枝实例上的路线编号），供 f_run_p4_reroute.py 读取
     rows = []

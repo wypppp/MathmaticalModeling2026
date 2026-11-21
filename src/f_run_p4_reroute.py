@@ -42,10 +42,19 @@ def main():
     instp = f_p3.Instance(a4, batches, blocks, cap, D, prune=True)
     inst = f_p3.Instance(a4, batches, blocks, cap, D)
     init = {}
-    for r in old.itertuples():
-        steps = instp.cands[r.batch][int(r.route)]["steps"]
-        idx = [i for i, c in enumerate(inst.cands[r.batch]) if c["steps"] == steps]
-        init[r.batch] = (idx[0], int(r.start)) if idx else (inst.base_idx[r.batch], int(r.start))
+    import pickle
+    end_pkl = OUT / "search_end.pkl"
+    if end_pkl.exists():  # f_run_p4.py 按路线步骤保存的搜索终点
+        ends_ = pickle.load(open(end_pkl, "rb"))
+        for b, (steps, day) in ends_.items():
+            idx = [i for i, c in enumerate(inst.cands[b]) if c["steps"] == steps]
+            assert idx, f"批 {b} 的搜索终点路线不在全候选中"
+            init[b] = (idx[0], day)
+    else:
+        for r in old.itertuples():
+            steps = instp.cands[r.batch][int(r.route)]["steps"]
+            idx = [i for i, c in enumerate(inst.cands[r.batch]) if c["steps"] == steps]
+            init[r.batch] = (idx[0], int(r.start)) if idx else (inst.base_idx[r.batch], int(r.start))
     ev0 = inst.evaluate(init)
     print(f"R25 问题 4 方案在新规则下：可行={ev0['feasible']} {ev0['viol'][:3]} tau={ev0['tau']} L={ev0['L']:.3f} delta={ev0['delta']} D={ev0['D']}")
     r_ = pd.read_csv(ROOT / "results" / "F" / "p3" / "ref.csv").iloc[0]  # 与问题 3 同一 J1 标尺（f_run_p3.py 写出）

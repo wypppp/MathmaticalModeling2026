@@ -69,4 +69,22 @@ check("V11-A", close(out["A"].D, 1238) and out["A"].tau == 4 and close(out["A"].
 check("V11-B", close(out["B"].D, 926) and out["B"].tau == 3 and close(out["B"].Lbar, 406.275, 1e-3) and not out["B"].flags, "留置写法")
 check("V13-例", all(close(out["B"].L_groups[g], out["C"].L_groups[g]) for g in ("e", "f")) and close(out["C"].D, 926),
       "留置写法与“经过后再回来装”的写法，各货组载货距离相同")
+
+# Z2（R47）手算例：WS 是 U11、U5、U10、U2 共用的队属仓库。四单位同日从驻地出发，各在 WS 装 1 台次后回驻地。
+# 到达先后 U11（15 km）、U5（37）、U10（93）、U2（108）。own_cap=True：第 4 支 U2 当天被“3 支”挡住，次日 8:00 开工；
+# own_cap=False（旧 H13）：四支都不计容量，U2 当天开工。
+def z2_case(flag):
+    saved = fe.OPT["own_cap"]
+    fe.OPT["own_cap"] = flag
+    try:
+        pls = [fe.Plan(900 + i, u, 10, 1, [fe.Step("WS", load={"g": 0.5}), fe.Step(u)], tuple(fb.H[u])) for i, u in enumerate(("U11", "U5", "U10", "U2"))]
+        r, _ = fe.simulate(pls, D)
+        return {p.unit: r[p.bid].logs[0].start for p in pls}
+    finally:
+        fe.OPT["own_cap"] = saved
+
+
+new, old = z2_case(True), z2_case(False)
+check("Z2-自用仓计容量", new["U2"] == (11, 0.0) and all(new[u][0] == 10 for u in ("U11", "U5", "U10")) and old["U2"][0] == 10,
+      f"own_cap=True: U2 开工 {fe.fmt(new['U2'])}；旧口径: {fe.fmt(old['U2'])}")
 sys.exit(0 if all(res) else 1)

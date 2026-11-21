@@ -1,0 +1,27 @@
+                                                  读法  表列少于回放  表列多于回放  完全相等  回放总天数  表列总天数  绝对差之和  表列少于孤立最少天数  孤立最少天数之和  表列少于回放_回程不计  超载批次
+                                             spec 默认      11       7     9    111    104     23           7       105           11     1
+                                          split_legs       3      10    14     93    104     19           3        93            3     1
+                                          split_long       7       9    11    104    104     20           6        99            7     1
+                                             no_ceil      11       7     9    109    104     25           7       104           11     1
+                                        load_anytime       6       8    13    102    104     20           4        95            6     1
+                                           no_wh_cap      10       7    10    108    104     24           7       105           10     1
+                               split_legs+split_long       3      10    14     93    104     19           3        93            3     1
+                                  split_legs+no_ceil       3      10    14     92    104     20           3        92            3     1
+                             split_legs+load_anytime       3      12    12     90    104     20           3        90            3     1
+                                split_legs+no_wh_cap       3      10    14     93    104     19           3        93            3     1
+                                  split_long+no_ceil       7      10    10    101    104     23           6        98            7     1
+                             split_long+load_anytime       3      10    14     95    104     17           3        90            3     1
+                                split_long+no_wh_cap       7       9    11    101    104     21           6        99            7     1
+                                no_ceil+load_anytime       6       8    13    101    104     21           4        95            6     1
+                                   no_ceil+no_wh_cap      10       7    10    108    104     24           7       104           10     1
+                              load_anytime+no_wh_cap       5       9    13     98    104     20           4        93            5     1
+split_legs+split_long+no_ceil+load_anytime+no_wh_cap       3      12    12     89    104     21           2        88            3     1
+{'spec_a6': 16, 'a7': 16, 'no_early': 18, 'union': 16, 'late_only': 14} （越窗批次数）
+批 21（附件3 批 19）表中顺序 ['WF', 'WS'] 超载；各排列： [(('WF', 'WS'), False, 900.0), (('WS', 'WF'), True, 900.0)]
+表列天数 = 提报时段长度：19/27；出发日 = 提报开始日：9/27
+        读法      口径  做不到的批数  其中表列天数等于提报时长                            批次
+   spec 默认 按表中顺序回放      11             9 6 7 8 10 11 13 16 20 21 22 23
+   spec 默认  孤立最少天数       7             6             6 7 8 13 20 22 23
+split_legs 按表中顺序回放       3             3                        7 8 23
+split_legs  孤立最少天数       3             3                        7 8 23
+EXIT 0

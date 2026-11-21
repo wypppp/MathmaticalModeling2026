@@ -24,14 +24,15 @@ UNIT_CAP = 3
 VEH_CAP = 20.0  # 每仓每天作业台次上限；默认 8 小时 × 2.5 = 20 已隐含，load_anytime 下须显式限制
 EPS = 1e-9
 
-# 读法开关（A 层检查 A2 用）。默认值 = spec v2.2，主结果只在默认值下产生。
+# 读法开关（A 层检查 A2 用）。默认值 = spec 现行版本，主结果只在默认值下产生。
 OPT = dict(
     split_legs=False,    # True：任何路段都可随时出发，行驶到 16:00 停、次日 8:00 续行（S6/G6 的备选）
     split_long=False,    # True：只对 > 500 km 的路段允许随时出发、途中过夜（即 §6 G6 的敏感性）
     no_ceil=False,       # True：作业车数 c = s⁺ + s⁻ 不取整（G7/G15 的备选）
     load_anytime=False,  # True：装卸不受 8:00–16:00 限制，可连续作业到夜间（录3.9“不考虑仓库的工作时段”的备选读法）；仓库日容量照计
     no_wh_cap=False,     # True：仓库不排队、无日容量（S8/S9 关闭，诊断用）
-    own_queue=True,      # True（spec S9 字面）：执行单位在自己可用的队属仓库作业也按先到先服务排队，只是不计日容量（S8）；False：自用仓完全不排队（GPT 第二批复算指出的旧实现）
+    own_cap=True,        # 裁 Z2（2026-11-21）：执行单位在自己可用的队属仓库作业也计日容量（3 支、20 台）；False = 旧假设 H13
+    own_queue=True,     # True（spec S9 字面）：执行单位在自己可用的队属仓库作业也按先到先服务排队，只是不计日容量（S8）；False：自用仓完全不排队（GPT 第二批复算指出的旧实现）
 )
 
 
@@ -56,7 +57,7 @@ class Plan:
     start_day: int
     T: int
     steps: list  # 最后一步应为回到驻地（node == unit）
-    own_wh: tuple = ()  # 执行单位可用的队属仓库（不排队、不占目标仓库容量）
+    own_wh: tuple = ()  # 执行单位可用的队属仓库（排队；是否计日容量由 OPT["own_cap"] 决定，现行 spec 计入）
 
 
 @dataclass
@@ -179,7 +180,7 @@ def simulate(plans: list, dist) -> tuple:
             s["moving_T"] += ceil_(sum(grp.values())) if grp else 0
         su, sl = sum(step.unload.values()), sum(step.load.values())
         cu, cl = (su, sl) if OPT["no_ceil"] else (ceil_(su), ceil_(sl))
-        counted = step.node.startswith("W") and step.node not in p.own_wh  # S8：自用队属仓不计日容量
+        counted = step.node.startswith("W") and (step.node not in p.own_wh or OPT["own_cap"])  # S8：日容量计一切仓库（own_cap=False 时自用队属仓不计，旧假设 H13）
         queued = counted or (step.node.startswith("W") and OPT["own_queue"])  # S9：所有仓库先到先服务
         if cu + cl > 0:
             wh = whs.setdefault(step.node, Warehouse())
