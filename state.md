@@ -40,7 +40,10 @@
 ### A. 证书收尾（阻断：决定正文 4 处【待补】与是否重跑）
 - A1 ✅ δ0 两个指派全部穷举（11-21 15:10）：指派 1 最好 Z = 1.292、指派 2 最好 Z = 1.232，均 > z* = 0.733，**无更优**（`results/F/p3_cert3/vectors.csv`，回放 2.14 亿次，与 measure 一致）
 - A2 **离线服务器 δ1**（1100 任务，人报 700+ 完成，约 2 小时）→ 人带回 `job\out`、`job\work.log` → 放 `results/F/p3_cert4/out/` → `python src/f_p3_cert4.py merge`
-- A3 **δ2 剩余 2944 个向量**（cert3 已判 799 个，全排除）：cert4 打包（`results/F/p3_cert4_d2`），约 75% 给离线服务器（δ1 跑完后）、25% 本机；带回后合并
+- A3 **δ2 剩余 2944 个向量**（cert3 已判 799 个，全排除，名单 `results/F/p3_cert3/d2_decided_by_cert3.txt`）：已打包 `results/F/p3_cert4_d2`（20119 任务，预计回放 4.663e8，直接排除 0）。按服务器实测速度（约 2e8 次/小时，本机约 2.2e7）**拆 90/10**（`tools/cert4_split.py ... 0.9`）：
+  - 服务器附加包 `D:\WYP\MM2026\cert_offline_d2\`（19827 任务，4.197e8）：人把里面的 `job_d2\` 和两个 bat 拷进服务器的 `cert_offline\`，δ1 跑完后双击 `4_run_job_d2.bat`；带回 `job_d2\out`、`job_d2\work.log`
+  - 本机（292 任务，4.66e7）：**11-21 16:25 已启动** `python src/f_p3_cert4.py work 18 results/F/p3_cert4_d2/local`，日志 `results/F/p3_cert4_d2/log/work_local.log`，预计约 2 小时；中断后同命令续跑
+  - 合并：把 `results/F/p3_cert4_d2/local/out/*.csv` 与服务器 `job_d2/out/*.csv` 都放进 `results/F/p3_cert4_d2/out/`，再 `CERT4_OUT=results/F/p3_cert4_d2 python src/f_p3_cert4.py merge`；δ2 的结论 = cert3 已判 799 个 + cert4 合并结果
 - A4 全部判定后按 V39 写：摘要、8.3“最优性”、11.1 证书行、11.2(2)/11.3(1)；evidence 登记；若发现更优 → 换主方案并重跑问题 3 导出、检查器、问题 4、补充实验、数字表（约半天）
 - A5 指派 0 在正文用 8.4 节 δ≥5 解析排除（不依赖解池）
 
