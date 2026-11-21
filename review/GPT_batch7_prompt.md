@@ -1,6 +1,6 @@
 # GPT 第七批第 2–4 项（spec v2.8 结果复核；人发送，填提交号）
 
-基准：work/primary 分支 <提交号>。读 `AGENTS.md`、`spec.md`（v2.8，含 §19 与你第 1 项意见的落实）。**不读 `src/`、`tools/`、`evidence.md`。** 输出放 `review/gpt_v28/`，推送到 `review/independent-F`。
+基准：work/primary 分支 89b6845。读 `AGENTS.md`、`spec.md`（v2.8，含 §19 与你第 1 项意见的落实）。**不读 `src/`、`tools/`、`evidence.md`。** 输出放 `review/gpt_v28/`，推送到 `review/independent-F`。
 
 ## 第 2 项：问题 2 精确复核（同第六批第 1 项的做法）
 从附件 1、4、5 独立建模，按 spec §4.4 P2 的六级字典序：U9 交 U6 块数最多 → 批次最少 → 代领代交等效车数最少 → 运力合计 ΣT 最少（T = ⌈max(接领和, 送交和)⌉，用精确有理数）→ ΣN → ΣP。
